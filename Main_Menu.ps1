@@ -1,6 +1,6 @@
 # Main_Menu.ps1
-# Version: 1.0.0
-# Description: 服务器一键调查工具 - 主入口脚本 (全量修复与性能增强版)
+# Version: 1.2.0
+# Description: 服务器一键调查工具 - 主入口脚本 (支持多实例 + 简化报告头)
 
 # 强制错误级别提示
 $ErrorActionPreference = "Continue"
@@ -24,7 +24,7 @@ Foreach ($M in $Modules) {
     }
 }
 
-# 3. 稳健地加载工具集 (Utils 必须先载入)
+# 3. 加载工具集
 Try {
     . (Join-Path $Root "Module_Utils.ps1")
 } Catch {
@@ -36,7 +36,7 @@ Try {
 # 4. 交互初始化 (询问文件名)
 Clear-Host
 Write-Host "************************************************************" -ForegroundColor Cyan
-Write-Host "*          服务器调查工具集 v1.0.0 (初始化)               *" -ForegroundColor Cyan
+Write-Host "*          服务器调查工具集 v1.2.0 (初始化)               *" -ForegroundColor Cyan
 Write-Host "************************************************************`n" -ForegroundColor Cyan
 
 $InFilename = Read-Host "请输入调查结果存档文件名 (默认为 Investigation_Report.txt)"
@@ -46,21 +46,26 @@ If (-not [string]::IsNullOrWhiteSpace($InFilename)) {
 } Else {
     $Global:ReportFile = "Investigation_Report.txt"
 }
-Write-Host "[Info] 调查输出将存至: ${Global:ReportFile}`n" -ForegroundColor Green
 
-# 5. 加载业务逻辑组件 (带异常捕获)
+# 初始化报告 (仅保留开始时间)
+$StartTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+Set-Content -Path $Global:ReportFile -Value "调查开始时间: ${StartTime}"
+Add-Content -Path $Global:ReportFile -Value ("=" * 50)
+Add-Content -Path $Global:ReportFile -Value ""
+
+Write-Host "[Info] 调查输出将存至: ${Global:ReportFile}" -ForegroundColor Green
+Write-Host "[Info] 调查开始时间: ${StartTime}`n" -ForegroundColor Gray
+
+# 5. 加载业务逻辑组件
 Try {
     . (Join-Path $Root "Module_Apache.ps1")
     . (Join-Path $Root "Module_Tomcat.ps1")
     . (Join-Path $Root "Module_Oracle.ps1")
 } Catch {
     Write-Host "[Fatal] 业务模块加载失败: $($_.Exception.Message)" -ForegroundColor Red
-    Read-Host "按回特退出..."
+    Read-Host "按回车退出..."
     Exit
 }
-
-# 初始化会话记录
-Write-ToReport -Title "新调查会话" -Content "开始时间: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')`n脚本版本: ${Global:AppVersion}"
 
 # 6. 主循环界面
 $UserAction = ""
@@ -68,8 +73,8 @@ While ($UserAction -ne "5") {
     Write-MenuHeader "功能导航"
     
     Write-Host " [1] 全量同步调查 (Apache + Tomcat + Oracle)" -ForegroundColor Green
-    Write-Host " [2] 单独调查 Apache HTTP Server" -ForegroundColor Cyan
-    Write-Host " [3] 单独调查 Apache Tomcat" -ForegroundColor Cyan
+    Write-Host " [2] 单独调查 Apache HTTP Server (支持多实例)" -ForegroundColor Cyan
+    Write-Host " [3] 单独调查 Apache Tomcat (支持多实例)" -ForegroundColor Cyan
     Write-Host " [4] 单独调查 Oracle Database" -ForegroundColor Cyan
     Write-Host " [5] 正常退出程序" -ForegroundColor Gray
     Write-Host ""
