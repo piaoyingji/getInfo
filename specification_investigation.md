@@ -24,7 +24,8 @@
 - **系统环境内部版本 (SQL 查询)**: 
     - 执行以下查询语句：
       ```sql
-      SELECT * FROM UHR.CONF_SYSCONTROL 
+      SELECT CS_CPROPERTYNAME, CS_CPROPERTYVALUE, CS_CPROPERTYDESC 
+      FROM UHR.CONF_SYSCONTROL 
       WHERE CS_CPROPERTYNAME LIKE '%Version%'
       ```
     - 脚本需处理连接至远程 DB Server 的情况（可能需要输入 DB Server IP）。
