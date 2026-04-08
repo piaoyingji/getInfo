@@ -1,6 +1,6 @@
 # Module_Utils.ps1
-# Version: 2.3.1
-# Description: 共通ユーティリティ (v2.3.1 安定化版)
+# Version: 2.3.2
+# Description: 共通ユーティリティ (v2.3.2 Oracle 検索精度向上版)
 
 $Global:ReportFile = "Investigation_Report.txt"
 $Global:I18n = @{
@@ -24,7 +24,7 @@ $Global:I18n = @{
         "PathSearch"       = "ディスク探索 (最終手段) 開始..."
         "Msg_Wait"         = "Enterキーを押してメニューに戻る..."
         "Msg_InputFile"    = "【入力】レポート名 (デフォルト: Investigation_Report.txt): "
-        "Msg_Start"        = "調査開始時間"
+        "Msg_Start"        = "調査開始时间"
         "Msg_Result"       = "[発見] {1} が {0} 件見つかりました。"
         "Msg_None"         = "該当なし"
         "Ora_Header"       = "--- Oracle ログイン ---"
@@ -95,4 +95,4 @@ Function Wait-AndClear {
     [void](Read-Host)
 }
 
-Write-Host "[INIT] Module_Utils v2.3.1 ロード完了" -ForegroundColor Gray
+Write-Host "[INIT] Module_Utils v2.3.2 ロード完了" -ForegroundColor Gray

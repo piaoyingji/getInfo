@@ -1,11 +1,11 @@
 # Module_Oracle.ps1
-# Version: 2.3.1
-# Description: Oracle 調査モジュール (文字化け・バインド変数エラー対策済 安定版)
+# Version: 2.3.2
+# Description: Oracle 調査モジュール (v2.3.2 メタデータ優先検知版)
 
 Function Investigate-Oracle {
     Param([Boolean]$Silent = $false)
     
-    # PowerShellの出力を一時的にShift-JISに合わせる(sqlplusの日本語出力を正しく受け取るため)
+    # 日本語出力を正しく受け取るためのエンコーディング設定
     $OriginalEncoding = [Console]::OutputEncoding
     Try {
         [Console]::OutputEncoding = [System.Text.Encoding]::GetEncoding(932)
@@ -24,37 +24,50 @@ Function Investigate-Oracle {
     $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($Pass)
     $UnsecurePass = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
 
-    $TargetTable = "CS_PROPERTY_CNF"
+    $TargetBase = "CS_PROPERTY_CNF"
     $TmpSql = Join-Path $env:TEMP "invest_ora.sql"
     
     Write-Host "`n$(T 'Ora_Connect')" -ForegroundColor Gray
 
-    # 所有者を事前にチェックするクエリ
-    $CheckSql = "SET HEAD OFF`nSET FEEDBACK OFF`nSELECT OWNER FROM ALL_TABLES WHERE TABLE_NAME = '$TargetTable' AND ROWNUM = 1;`nEXIT;"
-    $CheckSql | Set-Content -Path $TmpSql -Encoding ASCII
+    # --- ステップ1: メタデータから正確な所有者とテーブル名を取得 ---
+    # CSV形式で Owner,TableName を取得する
+    $MetaSql = @"
+SET HEAD OFF
+SET FEEDBACK OFF
+SET PAGESIZE 0
+SET TERMOUT OFF
+SELECT OWNER || ',' || TABLE_NAME FROM ALL_TABLES WHERE UPPER(TABLE_NAME) = '$TargetBase' AND ROWNUM = 1;
+EXIT;
+"@
+    $MetaSql | Set-Content -Path $TmpSql -Encoding ASCII
     
-    $Owner = ""
+    $FinalFullTable = $TargetBase # デフォルト
     Try {
-        $Owner = (sqlplus -S "${User}/${UnsecurePass}@${Instance}" "@$TmpSql").Trim()
-    } Catch {}
-
-    # 最終的なテーブル名を決定 (Ownerが見つかればプレフィックスを付ける)
-    $FinalTable = $TargetTable
-    If (-not [string]::IsNullOrWhiteSpace($Owner) -and $Owner -notlike "*ORA-*" -and $Owner -notlike "*SP2-*") {
-        $FinalTable = "$($Owner).$TargetTable"
-        Write-Host "[Info] 所有者 '$Owner' を自動検知しました。" -ForegroundColor Gray
+        $MetaRes = (sqlplus -S "${User}/${UnsecurePass}@${Instance}" "@$TmpSql").Trim()
+        If (-not [string]::IsNullOrWhiteSpace($MetaRes) -and $MetaRes -match "^([^,]+),([^,]+)$") {
+            $Owner = $Matches[1]
+            $RealName = $Matches[2]
+            # 特殊文字（小文字など）対策でダブルクォーテーションで囲む
+            $FinalFullTable = "`"$Owner`".`"$RealName`""
+            Write-Host "[Info] テーブル検知成功: $FinalFullTable" -ForegroundColor Cyan
+        } Else {
+            Write-Host "[Warn] メタデータからテーブルが見つかりませんでした。直打ちで試行します。" -ForegroundColor Yellow
+        }
+    } Catch {
+        Write-Host "[Error] メタデータ取得中にエラーが発生しました。" -ForegroundColor Red
     }
 
-    # メインクエリの作成
+    # --- ステップ2: 本番クエリの実行 ---
     $MainSql = @"
 SET PAGESIZE 100
-SET LINESIZE 200
+SET LINESIZE 500
 SET FEEDBACK OFF
 SET HEADING ON
-COLUMN CS_CPROPERTYNAME FORMAT A30
-COLUMN CS_CPROPERTYVALUE FORMAT A40
-COLUMN CS_CPROPERTYDESC FORMAT A50
-SELECT CS_CPROPERTYNAME, CS_CPROPERTYVALUE, CS_CPROPERTYDESC FROM $FinalTable;
+SET WRAP OFF
+COLUMN CS_CPROPERTYNAME FORMAT A40
+COLUMN CS_CPROPERTYVALUE FORMAT A60
+COLUMN CS_CPROPERTYDESC FORMAT A60
+SELECT CS_CPROPERTYNAME, CS_CPROPERTYVALUE, CS_CPROPERTYDESC FROM $FinalFullTable;
 EXIT;
 "@
     $MainSql | Set-Content -Path $TmpSql -Encoding ASCII
@@ -63,7 +76,7 @@ EXIT;
         $Output = sqlplus -S "${User}/${UnsecurePass}@${Instance}" "@$TmpSql"
         
         If ($Output -like "*ORA-*") {
-            Log-Info -Title "Oracle Database" -ShortResult "エラー発生" -FullDetail "Error: $Output"
+            Log-Info -Title "Oracle Database" -ShortResult "取得失敗" -FullDetail "Error: $Output"
         } Else {
             Log-Info -Title "Oracle Database" -ShortResult "データ取得完了" -FullDetail $Output
         }
@@ -71,7 +84,6 @@ EXIT;
         Log-Info -Title "Oracle Database" -ShortResult "実行エラー" -FullDetail $_.Exception.Message
     } Finally {
         If (Test-Path $TmpSql) { Remove-Item $TmpSql }
-        # エンコーディングを元に戻す
         [Console]::OutputEncoding = $OriginalEncoding
     }
 }
