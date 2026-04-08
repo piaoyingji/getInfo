@@ -1,6 +1,6 @@
 # Module_Utils.ps1
-# Version: 2.3.0
-# Description: 共通ユーティリティ (v2.3.0 Oracle サイレントリカバリ対応版)
+# Version: 2.3.1
+# Description: 共通ユーティリティ (v2.3.1 安定化版)
 
 $Global:ReportFile = "Investigation_Report.txt"
 $Global:I18n = @{
@@ -95,4 +95,4 @@ Function Wait-AndClear {
     [void](Read-Host)
 }
 
-Write-Host "[INIT] Module_Utils v2.3.0 ロード完了" -ForegroundColor Gray
+Write-Host "[INIT] Module_Utils v2.3.1 ロード完了" -ForegroundColor Gray
