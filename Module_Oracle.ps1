@@ -1,6 +1,6 @@
 # Module_Oracle.ps1
-# Version: 3.2.0
-# Description: Oracle 調査モジュール (出力バグ修正・NVL対応 v3.2.0)
+# Version: 3.3.0
+# Description: Oracle 調査モジュール (垂直整列・改行強化版 v3.3.0)
 
 Function Investigate-Oracle {
     Param([Boolean]$Silent = $false)
@@ -24,15 +24,16 @@ Function Investigate-Oracle {
     $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($Pass)
     $UnsecurePass = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
 
-    $TmpSql = Join-Path $env:TEMP "invest_ora.sql"
+    $TmpSql = Join-Path $env:TEMP "invest_ora.sq"
     
     Write-Host "`n$(T 'Ora_Connect')" -ForegroundColor Gray
 
     # ご指定のテーブル: {ユーザー名}.CONF_SYSCONTROL
     $TargetTable = "${User}.CONF_SYSCONTROL"
     
-    # SQL設定修正: TERMOUT ON にして出力を有効化
-    # また、NVLを使用してNULLによる結合消失を防止
+    # 改行と整列を重視したSQL
+    # RPADで項目名(NAME, VALUE, DESC)を6文字に固定し、コロンを揃えます
+    # CHR(13)||CHR(10) でWindows標準の改行コードを挿入します
     $MainSql = @"
 SET PAGESIZE 0
 SET FEEDBACK OFF
@@ -40,35 +41,34 @@ SET HEADING OFF
 SET TERMOUT ON
 SET ECHO OFF
 SET VERIFY OFF
-SET LINESIZE 1000
+SET LINESIZE 2000
 SELECT 
-'NAME  : ' || NVL(CS_CPROPERTYNAME, ' ') || CHR(10) ||
-'VALUE : ' || NVL(CS_CPROPERTYVALUE, ' ') || CHR(10) ||
-'DESC  : ' || NVL(CS_CPROPERTYDESC, ' ') || CHR(10) ||
+RPAD('NAME', 6)  || ': ' || NVL(CS_CPROPERTYNAME, ' ') || CHR(13) || CHR(10) ||
+RPAD('VALUE', 6) || ': ' || NVL(CS_CPROPERTYVALUE, ' ') || CHR(13) || CHR(10) ||
+RPAD('DESC', 6)  || ': ' || NVL(CS_CPROPERTYDESC, ' ') || CHR(13) || CHR(10) ||
 '------------------------------------------------------------'
 FROM $TargetTable 
 WHERE CS_CPROPERTYNAME LIKE '%Version%';
 EXIT;
 "@
-    # ASCIIで保存してSP2-0552エラーを防止
+    # ASCII保存 + 一時ファイル実行で安定動作を確保
     $MainSql | Set-Content -Path $TmpSql -Encoding ASCII
 
     Try {
+        # ご要望通り実行時のSQL文をログに含めます
+        $LogContent = "Executed SQL:`n$MainSql`n`nResults:`n"
+
         $Output = sqlplus -S "${User}/${UnsecurePass}@${Instance}" "@$TmpSql"
         
         If ($Output -like "*ORA-*") {
-            Write-Host "[ERROR] Oracle実行中にエラーが発生しました。" -ForegroundColor Red
-            Log-Info -Title "Oracle Database" -ShortResult "取得失敗" -FullDetail "Oracle Error: $Output"
+            Log-Info -Title "Oracle Database" -ShortResult "エラー" -FullDetail ($LogContent + $Output)
         } Else {
-            # 余分な空白行を取り除いて結果を判定
             $CleanOutput = $Output.Trim()
-            If ([string]::IsNullOrWhiteSpace($CleanOutput)) { 
-                $CleanOutput = "該当データなし" 
-            }
-            Log-Info -Title "Oracle Database" -ShortResult "完了" -FullDetail $CleanOutput
+            If ([string]::IsNullOrWhiteSpace($CleanOutput)) { $CleanOutput = "該当データなし" }
+            Log-Info -Title "Oracle Database" -ShortResult "成功" -FullDetail ($LogContent + $CleanOutput)
         }
     } Catch {
-        Log-Info -Title "Oracle Database" -ShortResult "例外発生" -FullDetail "Msg: $($_.Exception.Message)"
+        Log-Info -Title "Oracle Database" -ShortResult "実行時例外" -FullDetail "Msg: $($_.Exception.Message)"
     } Finally {
         If (Test-Path $TmpSql) { Remove-Item $TmpSql }
         [Console]::OutputEncoding = $OriginalEncoding
