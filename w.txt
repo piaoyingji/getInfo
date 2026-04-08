@@ -1,0 +1,6 @@
+調査開始时间: 2026-04-08 18:20:44
+
+==================================================
+--- Oracle Database ---
+Error: SELECT CS_CPROPERTYNAME, CS_CPROPERTYVALUE, CS_CPROPERTYDESC FROM CS_PROPERTY_CNF                                                                   * 行1でエラーが発生しました。: ORA-00942: 表またはビューが存在しません。  
+

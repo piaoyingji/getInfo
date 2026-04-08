@@ -1,6 +1,6 @@
 # Main_Menu.ps1
-# Version: 2.3.2
-# Description: サーバー一括調査ツール (v2.3.2 Oracle 検索精度向上版)
+# Version: 2.3.3
+# Description: サーバー一括調査ツール (v2.3.3 Oracle SQLログ対応版)
 
 $ErrorActionPreference = "Stop"
 
@@ -21,7 +21,7 @@ Try {
     # --- [画面1: 表紙] ---
     Clear-Host
     Write-MenuHeader (T "CoverTitle")
-    Write-Host "Version: 2.3.2 (Oracle Search Precision Mode)" -ForegroundColor Gray
+    Write-Host "Version: 2.3.3 (SQL Execution Debug Mode)" -ForegroundColor Gray
     Write-Host "`n$(T 'Msg_InputFile')" -NoNewline
     $InFilename = Read-Host
     $Global:ReportFile = If ([string]::IsNullOrWhiteSpace($InFilename)) { "Investigation_Report.txt" } Else { if ($InFilename -notlike "*.txt") { $InFilename + ".txt" } else { $InFilename } }
