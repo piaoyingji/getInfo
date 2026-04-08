@@ -1,6 +1,6 @@
 # Main_Menu.ps1
-# Version: 1.8.1
-# Description: サーバー一括調査ツール (日本語完全統一 + 2重Enter回避)
+# Version: 1.9.0
+# Description: サーバー一括調査ツール (日本語完全統一 + 2重Enter回避 + 1.9.0高速化対応)
 
 $ErrorActionPreference = "Stop"
 
@@ -21,7 +21,7 @@ Try {
     # --- [画面1: 表紙] ---
     Clear-Host
     Write-MenuHeader (T "CoverTitle")
-    Write-Host "Version: 1.8.1 (日本語版)" -ForegroundColor Gray
+    Write-Host "Version: 1.9.0 (Turbo Mode)" -ForegroundColor Gray
     Write-Host "`n$(T 'Msg_InputFile')" -NoNewline
     $InFilename = Read-Host
     $Global:ReportFile = If ([string]::IsNullOrWhiteSpace($InFilename)) { "Investigation_Report.txt" } Else { if ($InFilename -notlike "*.txt") { $InFilename + ".txt" } else { $InFilename } }
@@ -41,12 +41,9 @@ Try {
 
     $Selected = 0
     While ($true) {
-        # 直接 Invoke-Menu を呼び出し (Show-Menu は使用しない)
         $Selected = Invoke-Menu -Title (T "MainTitle") -Options $MainOptions -Default $Selected
         
-        # 画面切り替え（調査界面へ）
         Clear-Host
-        
         Switch ($Selected) {
             0 { 
                 Write-MenuHeader (T "InvestTotalTitle")
@@ -71,7 +68,6 @@ Try {
                 Wait-AndClear 
             }
             4 { 
-                # 設定子メニュー
                 $SubOptions = @((T "Opt_Lang"), (T "Opt_Back"))
                 $SubSelected = 0
                 While ($true) {
@@ -79,12 +75,12 @@ Try {
                     If ($SubSelected -eq 0) { 
                         Write-Host "`n現在は日本語のみ対応しています。" -ForegroundColor Yellow
                         Start-Sleep -Seconds 1 
-                    } Else { break } # 戻る
+                    } Else { break }
                 }
-                $Selected = 4 # カーソル位置保持
+                $Selected = 4
             }
             5 { 
-                Write-Host "`n終了します..." -ForegroundColor gray
+                Write-Host "`n終了します..." -ForegroundColor Gray
                 return 
             }
         }

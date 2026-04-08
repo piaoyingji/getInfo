@@ -1,6 +1,6 @@
 # Module_Utils.ps1
-# Version: 1.8.2
-# Description: 共通ユーティリティ (日本語完全統一・再修正)
+# Version: 1.9.0
+# Description: 共通ユーティリティ (日本語完全統一 + 1.9.0 Turbo対応)
 
 $Global:ReportFile = "Investigation_Report.txt"
 $Global:I18n = @{
@@ -53,7 +53,8 @@ Function Invoke-Menu {
         [Int]$Default = 0
     )
     $Selected = $Default
-    If ($Host.UI.RawUI.KeyAvailable) { $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown") }
+    # 既存のキー入力をクリア
+    While ($Host.UI.RawUI.KeyAvailable) { $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown") }
 
     While ($true) {
         Clear-Host
@@ -95,4 +96,4 @@ Function Wait-AndClear {
     [void](Read-Host)
 }
 
-Write-Host "[INIT] Module_Utils v1.8.2 ロード完了" -ForegroundColor Gray
+Write-Host "[INIT] Module_Utils v1.9.0 ロード完了" -ForegroundColor Gray

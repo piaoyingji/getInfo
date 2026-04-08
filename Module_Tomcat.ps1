@@ -86,11 +86,17 @@ Function Investigate-Tomcat {
         
         Foreach ($Dir in $TargetFolders) {
             Write-Host "   Searching $($Dir.FullName)..." -ForegroundColor DarkGray
-            # tomcat*.exe または catalina.jar を探す (深さ5まで)
-            $Hits = Get-ChildItem -Path $Dir.FullName -Include "tomcat*.exe","catalina.jar" -File -Recurse -Depth 5 -ErrorAction SilentlyContinue
-            Foreach ($H in $Hits) {
-                $Root = Get-TomcatRoot $H.FullName
-                If ($Root) { [void]$TomcatRoots.Add($Root.ToLower()) }
+            
+            # 高速ファイル検索 (cmd.exe の dir コマンドを利用してGet-ChildItem -Recurseの遅延を回避)
+            $Cmd1 = "dir `"$($Dir.FullName)\catalina.bat`" /s /b 2>nul"
+            $Cmd2 = "dir `"$($Dir.FullName)\tomcat*.exe`" /s /b 2>nul"
+            $Hits = @(cmd.exe /c $Cmd1) + @(cmd.exe /c $Cmd2)
+            
+            If ($Hits) {
+                Foreach ($H in $Hits) {
+                    $Root = Get-TomcatRoot $H
+                    If ($Root) { [void]$TomcatRoots.Add($Root.ToLower()) }
+                }
             }
         }
     }

@@ -1,97 +1,81 @@
 # Module_Apache.ps1
-# Version: 1.5.0
-# Description: Apache HTTP Server 调查模块 (PS 5.1 互换性强化)
+# Version: 1.9.0
+# Description: Apache 調査モジュール (超高速化：コマンドプロンプトdir検索 + WMI)
 
 Function Investigate-Apache {
     Param([Boolean]$Silent = $false)
     
-    $MenuTitle = "Apache HTTP Server $(T 'Searching')"
+    $CurrentDrive = (Get-Location).Drive.Name + ":"
+    $MenuTitle = "Apache Search [$CurrentDrive] (v1.9.0 Turbo Mode)"
     If (-not $Silent) { Write-MenuHeader $MenuTitle }
     
     $ApacheExes = New-Object System.Collections.Generic.HashSet[string]
     
-    # 策略 A: 运行进程 (httpd.exe)
-    Write-Host (T "ProcSearch") -ForegroundColor Gray
-    Try {
-        $HttpdProcesses = Get-CimInstance Win32_Process -Filter "Name = 'httpd.exe'" -ErrorAction SilentlyContinue
-        Foreach ($Proc in $HttpdProcesses) {
-            $Path = $Proc.ExecutablePath
-            If ($Path -and (Test-Path $Path)) { [void]$ApacheExes.Add($Path.ToLower()) }
+    # 1. プロセススキャン (WMI)
+    Write-Host "[1/3] $(T 'ProcSearch')..." -ForegroundColor Gray
+    $ProcFilter = "Name = 'httpd.exe'"
+    Get-CimInstance Win32_Process -Filter $ProcFilter -ErrorAction SilentlyContinue | Foreach-Object {
+        $Path = $_.ExecutablePath
+        If ($Path -and $Path.StartsWith($CurrentDrive, [System.StringComparison]::OrdinalIgnoreCase) -and (Test-Path $Path)) {
+            [void]$ApacheExes.Add($Path.ToLower())
         }
-    } Catch {}
+    }
     
-    # 策略 B: 服务扫描
-    Write-Host (T "SvcSearch") -ForegroundColor Gray
+    # Get-Process 経由 (WMIでパスが取れないプロセスの補完)
     Try {
-        $Services = Get-CimInstance Win32_Service -ErrorAction SilentlyContinue | Where-Object { $_.PathName -like "*httpd.exe*" }
-        Foreach ($Svc in $Services) {
-            If ($Svc.PathName -match '"?([^"]+\.exe)"?') {
-                $Path = $Matches[1]
-                If (Test-Path $Path) { [void]$ApacheExes.Add($Path.ToLower()) }
+        Get-Process "httpd" -ErrorAction SilentlyContinue | Foreach-Object {
+            $Path = $_.Path
+            If ($Path -and $Path.StartsWith($CurrentDrive, [System.StringComparison]::OrdinalIgnoreCase) -and (Test-Path $Path)) {
+                [void]$ApacheExes.Add($Path.ToLower())
             }
         }
     } Catch {}
     
-    # 策略 C: 常用目录
-    If ($ApacheExes.Count -eq 0) {
-        Write-Host (T "PathSearch") -ForegroundColor Yellow
-        $SearchRoots = @("D:\", "C:\")
-        Foreach ($SRoot in $SearchRoots) {
-            If (Test-Path $SRoot) {
-                $Files = Get-ChildItem -Path $SRoot -Filter "httpd.exe" -File -Recurse -Depth 3 -ErrorAction SilentlyContinue
-                Foreach ($F in $Files) { [void]$ApacheExes.Add($F.FullName.ToLower()) }
+    # 2. Windows サービススキャン
+    Write-Host "[2/3] $(T 'SvcSearch')..." -ForegroundColor Gray
+    $SvcFilter = "PathName LIKE '%httpd.exe%'"
+    Get-CimInstance Win32_Service -Filter $SvcFilter -ErrorAction SilentlyContinue | Foreach-Object {
+        If ($_.PathName -match '"?([^"]+\.exe)"?') {
+            $Path = $Matches[1]
+            If ($Path.StartsWith($CurrentDrive, [System.StringComparison]::OrdinalIgnoreCase) -and (Test-Path $Path)) {
+                [void]$ApacheExes.Add($Path.ToLower())
             }
         }
     }
     
+    # 3. 有限ディスクスキャン (高速dirコマンド使用)
     If ($ApacheExes.Count -eq 0) {
-        Log-Info -Title "Apache HTTP Server" -ShortResult (T "NoneFound") -FullDetail "None httpd.exe detected."
-        If (-not $Silent) { Wait-AndClear }
-        return
-    }
-    
-    Write-Host (T "ResultFound" @($ApacheExes.Count, "Apache")) -ForegroundColor Green
-    
-    $Count = 1
-    Foreach ($ApacheExe in $ApacheExes) {
-        $BinDir = Split-Path $ApacheExe
-        $ApacheRoot = Split-Path $BinDir
+        Write-Host "[3/3] $(T 'PathSearch')..." -ForegroundColor Gray
+        $Excludes = "Windows|ProgramData|Users|Recycle|System Volume|AppData"
+        $TargetFolders = Get-ChildItem ($CurrentDrive + "\") -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch $Excludes }
         
-        $VersionRaw = & "$ApacheExe" -v 2>$null | Out-String
-        $VersionShort = "Unknown"
-        If ($VersionRaw -match "Server version:\s+(.*)") { $VersionShort = $Matches[1].Trim() }
-        
-        $SSLInfo = T "SSL_Off"
-        $FullSSLDetail = "N/A"
-        
-        $ConfPath = Join-Path $ApacheRoot "conf\httpd.conf"
-        If (Test-Path $ConfPath) {
-            $ConfContent = Get-Content $ConfPath
-            $SSLInclude = $ConfContent | Select-String "Include .*ssl\.conf"
-            If ($SSLInclude) {
-                $SSLConfRel = ($SSLInclude.ToString() -split "Include ")[1].Trim()
-                $SSLConfPath = Join-Path $ApacheRoot $SSLConfRel
-                If (Test-Path $SSLConfPath) { $ConfContent += Get-Content $SSLConfPath }
-            }
+        Foreach ($Dir in $TargetFolders) {
+            Write-Host "   Searching $($Dir.FullName)..." -ForegroundColor DarkGray
             
-            If ($ConfContent | Select-String "SSLEngine on") {
-                $SSLInfo = T "SSL_On"
-                $CertMatch = $ConfContent | Select-String 'SSLCertificateFile\s+"?([^"]+)"?'
-                If ($CertMatch) {
-                    $CertPath = $CertMatch.Matches[0].Groups[1].Value.Trim()
-                    If (-not (Test-Path $CertPath)) { $CertPath = Join-Path $ApacheRoot $CertPath }
-                    If (Test-Path $CertPath) {
-                        Try {
-                            $CertObj = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($CertPath)
-                            $FullSSLDetail = "Subject: $($CertObj.Subject)`nExpiry: $($CertObj.NotAfter.ToString('yyyy-MM-dd'))"
-                        } Catch { $FullSSLDetail = "Parse Error" }
-                    }
+            $CmdSearch = "dir `"$($Dir.FullName)\httpd.exe`" /s /b 2>nul"
+            $Hits = cmd.exe /c $CmdSearch
+            
+            If ($Hits) {
+                Foreach ($H in $Hits) {
+                    If ($H -and (Test-Path $H)) { [void]$ApacheExes.Add($H.ToLower()) }
                 }
             }
         }
-        
-        Log-Info -Title "Apache Instance [${Count}]" -ShortResult "${VersionShort} | SSL: ${SSLInfo}" -FullDetail "Path: ${ApacheRoot}`n${VersionRaw}`nSSL: ${FullSSLDetail}"
+    }
+    
+    If ($ApacheExes.Count -eq 0) {
+        Log-Info -Title "Apache HTTP Server" -ShortResult (T "Msg_None") -FullDetail "No Apache found on ${CurrentDrive}."
+        return
+    }
+    
+    Write-Host (T "Msg_Result" @($ApacheExes.Count, "Apache")) -ForegroundColor Green
+    
+    $Count = 1
+    Foreach ($Exe in $ApacheExes) {
+        $Root = Split-Path (Split-Path $Exe)
+        $Version = & "$Exe" -v 2>$null | Out-String
+        $ShortV = If ($Version -match "Server version:\s+(.*)") { $Matches[1].Trim() } Else { "Unknown" }
+        Log-Info -Title "Apache [${Count}]" -ShortResult $ShortV -FullDetail "Location: $Root`n$Version"
         $Count++
     }
-    If (-not $Silent) { Wait-AndClear }
 }
