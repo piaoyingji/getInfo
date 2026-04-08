@@ -1,6 +1,6 @@
 # Module_Utils.ps1
-# Version: 2.0.0
-# Description: 共通ユーティリティ (日本語完全統一 + v2.0 瞬時検索対応)
+# Version: 2.1.0
+# Description: 共通ユーティリティ (v2.1.0 超高速検索対応)
 
 $Global:ReportFile = "Investigation_Report.txt"
 $Global:I18n = @{
@@ -95,4 +95,4 @@ Function Wait-AndClear {
     [void](Read-Host)
 }
 
-Write-Host "[INIT] Module_Utils v2.0.0 ロード完了" -ForegroundColor Gray
+Write-Host "[INIT] Module_Utils v2.1.0 ロード完了" -ForegroundColor Gray
