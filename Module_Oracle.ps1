@@ -1,6 +1,6 @@
 # Module_Oracle.ps1
-# Version: 2.5.0
-# Description: Oracle 調査モジュール (垂直フォーマット表示 v2.5.0)
+# Version: 2.6.0
+# Description: Oracle 調査モジュール (ユーザー名指定テーブル・垂直フォーマット・ログあり)
 
 Function Investigate-Oracle {
     Param([Boolean]$Silent = $false)
@@ -24,25 +24,14 @@ Function Investigate-Oracle {
     $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($Pass)
     $UnsecurePass = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
 
-    $TargetBase = "CONF_SYSCONTROL"
     $TmpSql = Join-Path $env:TEMP "invest_ora.sql"
     
     Write-Host "`n$(T 'Ora_Connect')" -ForegroundColor Gray
 
-    # --- ステップ1: メタデータから正確な所有者とテーブル名を特定 ---
-    $MetaSql = "SET HEAD OFF`nSET FEEDBACK OFF`nSELECT OWNER || '.' || TABLE_NAME FROM ALL_TABLES WHERE UPPER(TABLE_NAME) = '$TargetBase' AND ROWNUM = 1;`nEXIT;"
-    $MetaSql | Set-Content -Path $TmpSql -Encoding ASCII
-    
-    $FinalFullTable = $TargetBase
-    Try {
-        $MetaRes = (sqlplus -S "${User}/${UnsecurePass}@${Instance}" "@$TmpSql").Trim()
-        If (-not [string]::IsNullOrWhiteSpace($MetaRes) -and $MetaRes -notlike "*ORA-*") {
-            $FinalFullTable = $MetaRes
-        }
-    } Catch {}
+    # ユーザー自身をスキーマとしてテーブルを指定
+    $TargetTable = "${User}.CONF_SYSCONTROL"
 
-    # --- ステップ2: 垂直フォーマットでのクエリ実行 ---
-    # 各レコードを NAME, VALUE, DESC の順で縦に並べる
+    # --- 垂直フォーマットでのクエリ実行 ---
     $MainSql = @"
 SET PAGESIZE 0
 SET FEEDBACK OFF
@@ -54,21 +43,28 @@ SELECT
 'VALUE : ' || CS_CPROPERTYVALUE || CHR(10) ||
 'DESC  : ' || CS_CPROPERTYDESC || CHR(10) ||
 '------------------------------------------------------------'
-FROM $FinalFullTable 
+FROM $TargetTable 
 WHERE CS_CPROPERTYNAME LIKE '%Version%';
 EXIT;
 "@
     $MainSql | Set-Content -Path $TmpSql -Encoding ASCII
 
+    # 実行ログ
+    $LogDetail = "--- SQL Execution Log ---`n"
+    $LogDetail += "Executed Script:`n$MainSql`n"
+    $LogDetail += "-------------------------`n"
+
     Try {
         $Output = sqlplus -S "${User}/${UnsecurePass}@${Instance}" "@$TmpSql"
         
         If ($Output -like "*ORA-*") {
-            Log-Info -Title "Oracle Database" -ShortResult "取得失敗" -FullDetail "Error: $Output"
+            $LogDetail += "--- Raw Output ---`n$Output"
+            Log-Info -Title "Oracle Database" -ShortResult "取得失敗" -FullDetail $LogDetail
         } Else {
             # 出力が空の場合のケア
             If ([string]::IsNullOrWhiteSpace($Output)) { $Output = "該当するデータが見つかりませんでした。 (Condition: LIKE '%Version%')" }
-            Log-Info -Title "Oracle Database" -ShortResult "データ取得完了" -FullDetail $Output
+            $LogDetail += "--- Query Result ---`n$Output"
+            Log-Info -Title "Oracle Database" -ShortResult "データ取得完了" -FullDetail $LogDetail
         }
     } Catch {
         Log-Info -Title "Oracle Database" -ShortResult "実行エラー" -FullDetail "Exception: $($_.Exception.Message)"
