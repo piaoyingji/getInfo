@@ -1,6 +1,6 @@
 # Module_Utils.ps1
-# Version: 2.2.0
-# Description: 共通ユーティリティ (v2.2.0 Oracle スキーマ対応版)
+# Version: 2.3.0
+# Description: 共通ユーティリティ (v2.3.0 Oracle サイレントリカバリ対応版)
 
 $Global:ReportFile = "Investigation_Report.txt"
 $Global:I18n = @{
@@ -31,7 +31,6 @@ $Global:I18n = @{
         "Ora_User"         = "ユーザー名         : "
         "Ora_Pass"         = "パスワード         : "
         "Ora_Inst"         = "接続先/SID        : "
-        "Ora_Schema"       = "スキーマ名(任意)   : "
         "Ora_Connect"      = "[Action] 接続中..."
         "SSL_On"           = "有効"
         "SSL_Off"          = "無効"
@@ -96,4 +95,4 @@ Function Wait-AndClear {
     [void](Read-Host)
 }
 
-Write-Host "[INIT] Module_Utils v2.2.0 ロード完了" -ForegroundColor Gray
+Write-Host "[INIT] Module_Utils v2.3.0 ロード完了" -ForegroundColor Gray
