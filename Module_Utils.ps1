@@ -1,6 +1,6 @@
 # Module_Utils.ps1
-# Version: 2.3.3
-# Description: 共通ユーティリティ (v2.3.3 Oracle SQLログ対応版)
+# Version: 2.4.0
+# Description: 共通ユーティリティ (v2.4.0 Oracle テーブル名・条件修正版)
 
 $Global:ReportFile = "Investigation_Report.txt"
 $Global:I18n = @{
@@ -25,7 +25,7 @@ $Global:I18n = @{
         "Msg_Wait"         = "Enterキーを押してメニューに戻る..."
         "Msg_InputFile"    = "【入力】レポート名 (デフォルト: Investigation_Report.txt): "
         "Msg_Start"        = "調査開始時間"
-        "Msg_Result"       = "[発見] {1} が {0} 件见つかりました。"
+        "Msg_Result"       = "[発見] {1} が {0} 件見つかりました。"
         "Msg_None"         = "該当なし"
         "Ora_Header"       = "--- Oracle ログイン ---"
         "Ora_User"         = "ユーザー名         : "
@@ -95,4 +95,4 @@ Function Wait-AndClear {
     [void](Read-Host)
 }
 
-Write-Host "[INIT] Module_Utils v2.3.3 ロード完了" -ForegroundColor Gray
+Write-Host "[INIT] Module_Utils v2.4.0 ロード完了" -ForegroundColor Gray

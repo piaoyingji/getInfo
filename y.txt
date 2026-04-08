@@ -1,0 +1,21 @@
+調査開始時間: 2026-04-08 18:24:55
+
+==================================================
+--- Oracle Database ---
+--- SQL Execution Log ---
+Metadata Search SQL:
+SET HEAD OFF
+SET FEEDBACK OFF
+SELECT OWNER FROM ALL_TABLES WHERE UPPER(TABLE_NAME) = 'CS_PROPERTY_CNF' AND ROWNUM = 1;
+EXIT;
+Detected Owner: 
+Final Script to Execute:
+SET FEEDBACK OFF
+SET HEADING ON
+SET PAGESIZE 100
+SELECT CS_CPROPERTYNAME, CS_CPROPERTYVALUE, CS_CPROPERTYDESC FROM CS_PROPERTY_CNF;
+EXIT;
+-------------------------
+--- Raw Output ---
+SELECT CS_CPROPERTYNAME, CS_CPROPERTYVALUE, CS_CPROPERTYDESC FROM CS_PROPERTY_CNF                                                                   * 行1でエラーが発生しました。: ORA-00942: 表またはビューが存在しません。  
+
