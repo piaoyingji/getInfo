@@ -1,6 +1,6 @@
 # Main_Menu.ps1
-# Version: 2.1.0
-# Description: サーバー一括調査ツール (日本語完全統一 + v2.1.0 超高速検索対応)
+# Version: 2.2.0
+# Description: サーバー一括調査ツール (日本語完全統一 + v2.2.0 Oracle ORA-00942 対策版)
 
 $ErrorActionPreference = "Stop"
 
@@ -21,7 +21,7 @@ Try {
     # --- [画面1: 表紙] ---
     Clear-Host
     Write-MenuHeader (T "CoverTitle")
-    Write-Host "Version: 2.1.0 (Instant Mode v2)" -ForegroundColor Gray
+    Write-Host "Version: 2.2.0 (ORA-00942 Recovery Mode)" -ForegroundColor gray
     Write-Host "`n$(T 'Msg_InputFile')" -NoNewline
     $InFilename = Read-Host
     $Global:ReportFile = If ([string]::IsNullOrWhiteSpace($InFilename)) { "Investigation_Report.txt" } Else { if ($InFilename -notlike "*.txt") { $InFilename + ".txt" } else { $InFilename } }
@@ -80,7 +80,7 @@ Try {
                 $Selected = 4
             }
             5 { 
-                Write-Host "`n終了します..." -ForegroundColor gray
+                Write-Host "`n終了します..." -ForegroundColor Gray
                 return 
             }
         }
