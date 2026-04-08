@@ -1,6 +1,6 @@
 # Main_Menu.ps1
-# Version: 3.4.0
-# Description: サーバー一括調査ツール (v3.4.0 Oracle パイプ区切り対照版)
+# Version: 3.5.0
+# Description: サーバー一括調査ツール (v3.5.0 Oracle 改行不具合・バージョン対応版)
 
 $ErrorActionPreference = "Stop"
 
@@ -21,7 +21,7 @@ Try {
     # --- [画面1: 表紙] ---
     Clear-Host
     Write-MenuHeader (T "CoverTitle")
-    Write-Host "Version: 3.4.0 (Aligned Table Output Mode)" -ForegroundColor Gray
+    Write-Host "Version: 3.5.0 (Aligned Table + Oracle Version)" -ForegroundColor Gray
     Write-Host "`n$(T 'Msg_InputFile')" -NoNewline
     $InFilename = Read-Host
     $Global:ReportFile = If ([string]::IsNullOrWhiteSpace($InFilename)) { "Investigation_Report.txt" } Else { if ($InFilename -notlike "*.txt") { $InFilename + ".txt" } else { $InFilename } }

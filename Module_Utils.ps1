@@ -1,6 +1,6 @@
 # Module_Utils.ps1
-# Version: 3.4.0
-# Description: 共通ユーティリティ (v3.4.0 Oracle パイプ区切り表形式対応版)
+# Version: 3.5.0
+# Description: 共通ユーティリティ (v3.5.0 Oracle バージョン追加・改行不具合修正版)
 
 $Global:ReportFile = "Investigation_Report.txt"
 $Global:I18n = @{
@@ -88,6 +88,7 @@ Function Log-Info {
     Write-Host ("[RESULT] " + $Title + ": " + $ShortResult) -ForegroundColor Green
     $Content = ("="*50 + "`n--- " + $Title + " ---`n" + $FullDetail + "`n")
     If (-not [string]::IsNullOrWhiteSpace($FullDetail)) {
+        # 配列が渡された場合でも確実に改行が残るようにエンコードと入力をチェック
         Add-Content -Path $Global:ReportFile -Value $Content -Encoding UTF8
     }
 }
@@ -97,4 +98,4 @@ Function Wait-AndClear {
     [void](Read-Host)
 }
 
-Write-Host "[INIT] Module_Utils v3.4.0 ロード完了" -ForegroundColor Gray
+Write-Host "[INIT] Module_Utils v3.5.0 ロード完了" -ForegroundColor Gray

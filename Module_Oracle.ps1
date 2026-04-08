@@ -1,6 +1,6 @@
 # Module_Oracle.ps1
-# Version: 3.4.0
-# Description: Oracle 調査モジュール (パイプ区切り表形式・エイリアス対応 v3.4.0)
+# Version: 3.5.0
+# Description: Oracle 調査モジュール (バージョン取得・改行不具合修正 v3.5.0)
 
 Function Investigate-Oracle {
     Param([Boolean]$Silent = $false)
@@ -29,10 +29,9 @@ Function Investigate-Oracle {
     Write-Host "`n$(T 'Ora_Connect')" -ForegroundColor Gray
 
     # ご指定のテーブル: {ユーザー名}.CONF_SYSCONTROL
+    # 加えて、Oracleのバージョン情報も取得します
     $TargetTable = "${User}.CONF_SYSCONTROL"
     
-    # パイプ区切りの表形式出力を実現する設定
-    # エイリアスを PROPERTY_NAME, VALUE, DESCRIPTION に設定
     $MainSql = @"
 SET PAGESIZE 100
 SET FEEDBACK OFF
@@ -45,6 +44,11 @@ SET TRIMSPOOL ON
 SET COLSEP ' | '
 SET UNDERLINE '-'
 
+PROMPT [ ORACLE VERSION ]
+SELECT BANNER FROM V`$VERSION;
+
+PROMPT
+PROMPT [ PROPERTY CONFIGURATION ]
 COLUMN PROPERTY_NAME FORMAT A25
 COLUMN VALUE         FORMAT A25
 COLUMN DESCRIPTION   FORMAT A60
@@ -64,7 +68,9 @@ EXIT;
         # 実行SQLをログに記録
         $LogContent = "Executed SQL:`n$MainSql`n`nResults:`n"
 
-        $Output = sqlplus -S "${User}/${UnsecurePass}@${Instance}" "@$TmpSql"
+        # sqlplus の出力を直接キャプチャし、配列を改行コードで明示的に結合
+        $RawOutput = sqlplus -S "${User}/${UnsecurePass}@${Instance}" "@$TmpSql"
+        $Output = $RawOutput -join "`r`n"
         
         If ($Output -like "*ORA-*") {
             Log-Info -Title "Oracle Database" -ShortResult "エラー" -FullDetail ($LogContent + $Output)
