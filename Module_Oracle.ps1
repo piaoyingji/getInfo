@@ -1,6 +1,6 @@
 # Module_Oracle.ps1
-# Version: 3.3.0
-# Description: Oracle 調査モジュール (垂直整列・改行強化版 v3.3.0)
+# Version: 3.4.0
+# Description: Oracle 調査モジュール (パイプ区切り表形式・エイリアス対応 v3.4.0)
 
 Function Investigate-Oracle {
     Param([Boolean]$Silent = $false)
@@ -24,38 +24,44 @@ Function Investigate-Oracle {
     $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($Pass)
     $UnsecurePass = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
 
-    $TmpSql = Join-Path $env:TEMP "invest_ora.sq"
+    $TmpSql = Join-Path $env:TEMP "invest_ora.sql"
     
     Write-Host "`n$(T 'Ora_Connect')" -ForegroundColor Gray
 
     # ご指定のテーブル: {ユーザー名}.CONF_SYSCONTROL
     $TargetTable = "${User}.CONF_SYSCONTROL"
     
-    # 改行と整列を重視したSQL
-    # RPADで項目名(NAME, VALUE, DESC)を6文字に固定し、コロンを揃えます
-    # CHR(13)||CHR(10) でWindows標準の改行コードを挿入します
+    # パイプ区切りの表形式出力を実現する設定
+    # エイリアスを PROPERTY_NAME, VALUE, DESCRIPTION に設定
     $MainSql = @"
-SET PAGESIZE 0
+SET PAGESIZE 100
 SET FEEDBACK OFF
-SET HEADING OFF
+SET HEADING ON
+SET LINESIZE 500
 SET TERMOUT ON
 SET ECHO OFF
 SET VERIFY OFF
-SET LINESIZE 2000
+SET TRIMSPOOL ON
+SET COLSEP ' | '
+SET UNDERLINE '-'
+
+COLUMN PROPERTY_NAME FORMAT A25
+COLUMN VALUE         FORMAT A25
+COLUMN DESCRIPTION   FORMAT A60
+
 SELECT 
-RPAD('NAME', 6)  || ': ' || NVL(CS_CPROPERTYNAME, ' ') || CHR(13) || CHR(10) ||
-RPAD('VALUE', 6) || ': ' || NVL(CS_CPROPERTYVALUE, ' ') || CHR(13) || CHR(10) ||
-RPAD('DESC', 6)  || ': ' || NVL(CS_CPROPERTYDESC, ' ') || CHR(13) || CHR(10) ||
-'------------------------------------------------------------'
+    CS_CPROPERTYNAME  AS PROPERTY_NAME, 
+    CS_CPROPERTYVALUE AS VALUE, 
+    CS_CPROPERTYDESC  AS DESCRIPTION
 FROM $TargetTable 
 WHERE CS_CPROPERTYNAME LIKE '%Version%';
 EXIT;
 "@
-    # ASCII保存 + 一時ファイル実行で安定動作を確保
+    # ASCII保存で安定性を確保
     $MainSql | Set-Content -Path $TmpSql -Encoding ASCII
 
     Try {
-        # ご要望通り実行時のSQL文をログに含めます
+        # 実行SQLをログに記録
         $LogContent = "Executed SQL:`n$MainSql`n`nResults:`n"
 
         $Output = sqlplus -S "${User}/${UnsecurePass}@${Instance}" "@$TmpSql"
@@ -68,7 +74,7 @@ EXIT;
             Log-Info -Title "Oracle Database" -ShortResult "成功" -FullDetail ($LogContent + $CleanOutput)
         }
     } Catch {
-        Log-Info -Title "Oracle Database" -ShortResult "実行時例外" -FullDetail "Msg: $($_.Exception.Message)"
+        Log-Info -Title "Oracle Database" -ShortResult "例外発生" -FullDetail "Msg: $($_.Exception.Message)"
     } Finally {
         If (Test-Path $TmpSql) { Remove-Item $TmpSql }
         [Console]::OutputEncoding = $OriginalEncoding

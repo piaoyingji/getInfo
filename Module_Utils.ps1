@@ -1,6 +1,6 @@
 # Module_Utils.ps1
-# Version: 3.3.0
-# Description: 共通ユーティリティ (v3.3.0 Oracle 改行・整列強化版)
+# Version: 3.4.0
+# Description: 共通ユーティリティ (v3.4.0 Oracle パイプ区切り表形式対応版)
 
 $Global:ReportFile = "Investigation_Report.txt"
 $Global:I18n = @{
@@ -97,4 +97,4 @@ Function Wait-AndClear {
     [void](Read-Host)
 }
 
-Write-Host "[INIT] Module_Utils v3.3.0 ロード完了" -ForegroundColor Gray
+Write-Host "[INIT] Module_Utils v3.4.0 ロード完了" -ForegroundColor Gray

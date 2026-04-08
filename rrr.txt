@@ -1,0 +1,24 @@
+調査開始時間: 2026-04-08 14:42:51
+
+==================================================
+--- Apache HTTP Server ---
+None httpd.exe detected.
+
+==================================================
+--- Apache Tomcat ---
+None Tomcat instances detected.
+
+==================================================
+--- Oracle Database ---
+Oracle Version: SQL*Plus: Release 19.0.0.0.0 - Production
+
+Query Result:
+PROPERTY_NAME        | VALUE                | DESCRIPTION
+----------------------------------------------------------------------
+Version              | 2,3,1,8              | HGSEALEDのバ-ジョン
+FrameVersion         | 4.18.0               | SmartCompanyフレームのバージョン
+UhrShoteate_Version  | 2.3+genkyo1.0        | U-PDS HR 諸手当申請システムバージョン
+UhrSalary_Version    | 2.4.3                | U-PDS HR Web給与明細システムバージョン
+UhrCore_Version      | 2.11                 | U-PDS HR コアシステムバージョン
+UhrNencho_Version    | 2.11.5+reigetsu2.11.4 | U-PDS HR 年末調整申請システムバージョン
+
