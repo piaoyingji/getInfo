@@ -1,11 +1,11 @@
 # Module_Oracle.ps1
-# Version: 2.6.0
-# Description: Oracle 調査モジュール (ユーザー名指定テーブル・垂直フォーマット・ログあり)
+# Version: 2.7.0
+# Description: Oracle 調査モジュール (ご指定SQL再現・垂直整列・ログ出力版)
 
 Function Investigate-Oracle {
     Param([Boolean]$Silent = $false)
     
-    # 日本語出力を正しく受け取るためのエンコーディング設定
+    # 日本語文字化け対策
     $OriginalEncoding = [Console]::OutputEncoding
     Try {
         [Console]::OutputEncoding = [System.Text.Encoding]::GetEncoding(932)
@@ -28,16 +28,18 @@ Function Investigate-Oracle {
     
     Write-Host "`n$(T 'Ora_Connect')" -ForegroundColor Gray
 
-    # ユーザー自身をスキーマとしてテーブルを指定
+    # --- ご指定のSQL文を構築 ---
+    # UHRの部分は入力されたユーザー名 ($User) を使用します
     $TargetTable = "${User}.CONF_SYSCONTROL"
-
-    # --- 垂直フォーマットでのクエリ実行 ---
+    
+    # 垂直フォーマット用のSQL
+    # LABEL : VALUE の形式で1レコードにつき複数行出力し、最後に区切り線を入れます
     $MainSql = @"
 SET PAGESIZE 0
 SET FEEDBACK OFF
 SET HEADING OFF
-SET LINESIZE 1000
 SET TERMOUT OFF
+SET LINESIZE 1000
 SELECT 
 'NAME  : ' || CS_CPROPERTYNAME || CHR(10) ||
 'VALUE : ' || CS_CPROPERTYVALUE || CHR(10) ||
@@ -49,25 +51,27 @@ EXIT;
 "@
     $MainSql | Set-Content -Path $TmpSql -Encoding ASCII
 
-    # 実行ログ
+    # 実行ログの構築 (ご要望通り実行SQLをログに含めます)
     $LogDetail = "--- SQL Execution Log ---`n"
-    $LogDetail += "Executed Script:`n$MainSql`n"
+    $LogDetail += "Executed SQL:`n$MainSql`n"
     $LogDetail += "-------------------------`n"
 
     Try {
+        # 安定の一時ファイル方式で実行
         $Output = sqlplus -S "${User}/${UnsecurePass}@${Instance}" "@$TmpSql"
         
         If ($Output -like "*ORA-*") {
-            $LogDetail += "--- Raw Output ---`n$Output"
-            Log-Info -Title "Oracle Database" -ShortResult "取得失敗" -FullDetail $LogDetail
+            $LogDetail += "--- Error Output ---`n$Output"
+            Log-Info -Title "Oracle Database" -ShortResult "エラー発生" -FullDetail $LogDetail
         } Else {
-            # 出力が空の場合のケア
-            If ([string]::IsNullOrWhiteSpace($Output)) { $Output = "該当するデータが見つかりませんでした。 (Condition: LIKE '%Version%')" }
-            $LogDetail += "--- Query Result ---`n$Output"
-            Log-Info -Title "Oracle Database" -ShortResult "データ取得完了" -FullDetail $LogDetail
+            If ([string]::IsNullOrWhiteSpace($Output)) { 
+                $Output = "該当データなし (Table: $TargetTable, Condition: LIKE '%Version%')" 
+            }
+            $LogDetail += "--- Query Results ---`n$Output"
+            Log-Info -Title "Oracle Database" -ShortResult "成功" -FullDetail $LogDetail
         }
     } Catch {
-        Log-Info -Title "Oracle Database" -ShortResult "実行エラー" -FullDetail "Exception: $($_.Exception.Message)"
+        Log-Info -Title "Oracle Database" -ShortResult "例外発生" -FullDetail "Msg: $($_.Exception.Message)"
     } Finally {
         If (Test-Path $TmpSql) { Remove-Item $TmpSql }
         [Console]::OutputEncoding = $OriginalEncoding
