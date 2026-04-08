@@ -1,57 +1,98 @@
 # Main_Menu.ps1
-# Version: 1.5.1
-# Description: サーバー一括調査ツール - メインメニュー (子母メニュー構造 + 交互式)
+# Version: 1.8.1
+# Description: サーバー一括調査ツール (日本語完全統一 + 2重Enter回避)
 
 $ErrorActionPreference = "Stop"
 
 Try {
-    $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
+    # 1. パス初期化
+    $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition -ErrorAction SilentlyContinue
     If (-not $ScriptDir) { $ScriptDir = Get-Location }
     Set-Location $ScriptDir
 
+    # 2. 共通モジュールのロード
     $UtilsPath = Join-Path $ScriptDir "Module_Utils.ps1"
-    If (Test-Path $UtilsPath) { . $UtilsPath } Else { throw "Module_Utils.ps1 not found." }
+    If (Test-Path $UtilsPath) { . $UtilsPath } Else { throw "Module_Utils.ps1 が見つかりません。" }
 
     . (Join-Path $ScriptDir "Module_Apache.ps1")
     . (Join-Path $ScriptDir "Module_Tomcat.ps1")
     . (Join-Path $ScriptDir "Module_Oracle.ps1")
 
-    # 初期設定
-    Write-MenuHeader (T "Searching")
-    Write-Host "`n$(T 'AskFilename')" -ForegroundColor White
-    $InFilename = Read-Host ">>"
+    # --- [画面1: 表紙] ---
+    Clear-Host
+    Write-MenuHeader (T "CoverTitle")
+    Write-Host "Version: 1.8.1 (日本語版)" -ForegroundColor Gray
+    Write-Host "`n$(T 'Msg_InputFile')" -NoNewline
+    $InFilename = Read-Host
     $Global:ReportFile = If ([string]::IsNullOrWhiteSpace($InFilename)) { "Investigation_Report.txt" } Else { if ($InFilename -notlike "*.txt") { $InFilename + ".txt" } else { $InFilename } }
 
     $StartTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    Set-Content -Path $Global:ReportFile -Value ((T "StartTime") + ": ${StartTime}") -Encoding UTF8
-    Add-Content -Path $Global:ReportFile -Value "" -Encoding UTF8
+    Set-Content -Path $Global:ReportFile -Value ("$(T 'Msg_Start'): $StartTime`n") -Encoding UTF8
 
-    $MainMenuOptions = @((T "MenuOption1"), (T "MenuOption2"), (T "MenuOption3"), (T "MenuOption4"), (T "MenuOptionSettings"), (T "MenuOptionExit"))
-    $SubMenuOptions = @((T "LangChoice"), (T "ReturnMain"))
+    # --- [画面2: メインメニュー] ---
+    $MainOptions = @(
+        (T "Opt_All"),
+        (T "Opt_Apache"),
+        (T "Opt_Tomcat"),
+        (T "Opt_Oracle"),
+        (T "Opt_Settings"),
+        (T "Opt_Exit")
+    )
 
-    $MainSelected = 0
+    $Selected = 0
     While ($true) {
-        $MainSelected = Show-Menu -Title "Main Menu" -Options $MainMenuOptions -SelectedIndex $MainSelected
+        # 直接 Invoke-Menu を呼び出し (Show-Menu は使用しない)
+        $Selected = Invoke-Menu -Title (T "MainTitle") -Options $MainOptions -Default $Selected
         
-        Switch ($MainSelected) {
-            0 { Write-MenuHeader (T "Searching"); Investigate-Apache -Silent $true; Investigate-Tomcat -Silent $true; Investigate-Oracle -Silent $true; Wait-AndClear }
-            1 { Investigate-Apache }
-            2 { Investigate-Tomcat }
-            3 { Investigate-Oracle }
+        # 画面切り替え（調査界面へ）
+        Clear-Host
+        
+        Switch ($Selected) {
+            0 { 
+                Write-MenuHeader (T "InvestTotalTitle")
+                Investigate-Apache -Silent $true
+                Investigate-Tomcat -Silent $true
+                Investigate-Oracle -Silent $true
+                Wait-AndClear 
+            }
+            1 { 
+                Write-MenuHeader (T "InvestTitle" @("Apache"))
+                Investigate-Apache -Silent $true
+                Wait-AndClear 
+            }
+            2 { 
+                Write-MenuHeader (T "InvestTitle" @("Tomcat"))
+                Investigate-Tomcat -Silent $true
+                Wait-AndClear 
+            }
+            3 { 
+                Write-MenuHeader (T "InvestTitle" @("Oracle"))
+                Investigate-Oracle -Silent $true
+                Wait-AndClear 
+            }
             4 { 
-                # 設定子メニュー (子母構造の復活)
+                # 設定子メニュー
+                $SubOptions = @((T "Opt_Lang"), (T "Opt_Back"))
                 $SubSelected = 0
                 While ($true) {
-                    $SubSelected = Show-Menu -Title (T "SubMenuHeader") -Options $SubMenuOptions -SelectedIndex $SubSelected
-                    If ($SubSelected -eq 0) { Write-Host "`n現在は日本語版のみ有効です。" -ForegroundColor Yellow; Start-Sleep -Seconds 1 }
-                    Else { break }
+                    $SubSelected = Invoke-Menu -Title (T "SubTitle") -Options $SubOptions -Default $SubSelected
+                    If ($SubSelected -eq 0) { 
+                        Write-Host "`n現在は日本語のみ対応しています。" -ForegroundColor Yellow
+                        Start-Sleep -Seconds 1 
+                    } Else { break } # 戻る
                 }
+                $Selected = 4 # カーソル位置保持
             }
-            5 { Write-Host "Exiting..." -ForegroundColor Gray; return }
+            5 { 
+                Write-Host "`n終了します..." -ForegroundColor gray
+                return 
+            }
         }
     }
+
 } Catch {
     Write-Host "`n[Critical Error] $($_.Exception.Message)" -ForegroundColor Red
-    Write-Host "`nプログラムが異常終了しました。Enterキーを押してください。" -ForegroundColor Yellow
-    Read-Host
+    Write-Host "StackTrace: $($_.ScriptStackTrace)" -ForegroundColor DarkGray
+    Write-Host "`nプログラムが異常終了しました。Enterキーを押してください。" -ForegroundColor White
+    [void](Read-Host)
 }

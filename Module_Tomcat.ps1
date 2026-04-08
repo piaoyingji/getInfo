@@ -1,94 +1,121 @@
 # Module_Tomcat.ps1
-# Version: 1.5.0
-# Description: Tomcat 调查模块 (PS 5.1 互换性强化)
+# Version: 1.9.0
+# Description: Tomcat 調査モジュール (深層ディレクトリ探索 + 権限配慮型スキャン)
 
 Function Investigate-Tomcat {
     Param([Boolean]$Silent = $false)
     
-    $MenuTitle = "Apache Tomcat $(T 'Searching')"
+    $CurrentDrive = (Get-Location).Drive.Name + ":"
+    $MenuTitle = "Tomcat Search [$CurrentDrive] (v1.9.0 Deep Scan)"
     If (-not $Silent) { Write-MenuHeader $MenuTitle }
     
     $TomcatRoots = New-Object System.Collections.Generic.HashSet[string]
     
-    # 策略 A: 运行进程
-    Write-Host (T "ProcSearch") -ForegroundColor Gray
-    Try {
-        $JavaProcesses = Get-CimInstance Win32_Process -Filter "Name = 'java.exe'" -ErrorAction SilentlyContinue
-        Foreach ($Proc in $JavaProcesses) {
-            $CmdLine = $Proc.CommandLine
-            If ($CmdLine -match '-Dcatalina\.home="?([^"\s]+)"?') {
-                $Path = $Matches[1].TrimEnd('\')
-                If (Test-Path $Path) { [void]$TomcatRoots.Add($Path.ToLower()) }
+    # 辅助函数：智能识别 Tomcat 根目录 (bin 且含 webapps/conf/lib)
+    Function Get-TomcatRoot {
+        Param([String]$Path)
+        If ([string]::IsNullOrWhiteSpace($Path) -or -not (Test-Path $Path)) { return $null }
+        $Current = $Path
+        # 如果当前路径是二进制文件，先取其目录
+        If (-not (Test-Path $Path -PathType Container)) { $Current = Split-Path $Path }
+        
+        # 向上爬升 5 层寻找特征目录
+        For ($i=0; $i -lt 5; $i++) {
+            $hasBin = Test-Path (Join-Path $Current "bin")
+            $hasConf = Test-Path (Join-Path $Current "conf")
+            $hasWebapps = Test-Path (Join-Path $Current "webapps")
+            $hasLib = Test-Path (Join-Path $Current "lib")
+            
+            # 满足 Tomcat 结构特征
+            If ($hasBin -And ($hasConf -or $hasWebapps -or $hasLib)) {
+                return $Current
             }
-            ElseIf ($CmdLine -match '-Dcatalina\.base="?([^"\s]+)"?') {
-                $Path = $Matches[1].TrimEnd('\')
-                If (Test-Path $Path) { [void]$TomcatRoots.Add($Path.ToLower()) }
+            $Parent = Split-Path $Current
+            If ($Parent -eq $Current -or $null -eq $Parent) { break }
+            $Current = $Parent
+        }
+        return $null
+    }
+
+    # 1. プロセススキャン (WMI + Get-Process 双方向)
+    Write-Host "[1/3] $(T 'Msg_Proc')..." -ForegroundColor Gray
+    # WMI 経由
+    $WmiProcs = Get-CimInstance Win32_Process -Filter "Name LIKE '%tomcat%' OR Name = 'java.exe' OR CommandLine LIKE '%catalina%'" -ErrorAction SilentlyContinue
+    Foreach ($P in $WmiProcs) {
+        $Paths = @($P.ExecutablePath)
+        If ($P.CommandLine -match '-Dcatalina\.home="?([^"^\-]+)"?') { $Paths += $Matches[1].Trim().TrimEnd('\').Trim('"') }
+        
+        Foreach ($Path in $Paths) {
+            $Root = Get-TomcatRoot $Path
+            If ($Root -and $Root.StartsWith($CurrentDrive, [System.StringComparison]::OrdinalIgnoreCase)) {
+                [void]$TomcatRoots.Add($Root.ToLower())
             }
         }
-    } Catch {}
+    }
     
-    # 策略 B: 服务扫描
-    Write-Host (T "SvcSearch") -ForegroundColor Gray
+    # Get-Process 経由 (WMIでパスが取れないプロセスの補完)
+    # ※管理者で実行していない場合、他ユーザーのパスは取得不可
     Try {
-        $SS = Get-CimInstance Win32_Service -ErrorAction SilentlyContinue | Where-Object { $_.PathName -like "*tomcat*" -or $_.DisplayName -like "*tomcat*" }
-        Foreach ($S in $SS) {
-            If ($S.PathName -match '"?([^"]+)\\bin\\') {
-                $Path = $Matches[1].TrimEnd('\')
-                If (Test-Path $Path) { [void]$TomcatRoots.Add($Path.ToLower()) }
+        Get-Process | Where-Object { $_.Name -like "*tomcat*" } | Foreach-Object {
+            $Root = Get-TomcatRoot $_.Path
+            If ($Root -and $Root.StartsWith($CurrentDrive, [System.StringComparison]::OrdinalIgnoreCase)) {
+                [void]$TomcatRoots.Add($Root.ToLower())
             }
         }
     } Catch {}
 
-    # 策略 C: 目录扫描
+    # 2. Windows サービススキャン
+    Write-Host "[2/3] $(T 'Msg_Svc')..." -ForegroundColor Gray
+    $SvcFilter = "PathName LIKE '%tomcat%' OR PathName LIKE '%catalina%' OR DisplayName LIKE '%tomcat%'"
+    Get-CimInstance Win32_Service -Filter $SvcFilter -ErrorAction SilentlyContinue | Foreach-Object {
+        $PathToTest = $null
+        If ($_.PathName -match '"?([^"]+)\\bin\\') { $PathToTest = $Matches[1] }
+        ElseIf ($_.PathName -match '-Dcatalina\.home="?([^"^\-]+)"?') { $PathToTest = $Matches[1].Trim().TrimEnd('\').Trim('"') }
+        
+        $Root = Get-TomcatRoot $PathToTest
+        If ($Root -and $Root.StartsWith($CurrentDrive, [System.StringComparison]::OrdinalIgnoreCase)) {
+            [void]$TomcatRoots.Add($Root.ToLower())
+        }
+    }
+
+    # 3. 有限ディスクスキャン (さらに広範囲な検索)
     If ($TomcatRoots.Count -eq 0) {
-        Write-Host (T "PathSearch") -ForegroundColor Yellow
-        $SearchRoots = @("D:\", "C:\")
-        Foreach ($SRoot in $SearchRoots) {
-            If (Test-Path $SRoot) {
-                # 深度限制以防挂死
-                $Jars = Get-ChildItem -Path $SRoot -Filter "catalina.jar" -File -Recurse -Depth 4 -ErrorAction SilentlyContinue
-                Foreach ($J in $Jars) {
-                    $TRoot = $J.Directory.Parent.Parent.FullName.ToLower()
-                    [void]$TomcatRoots.Add($TRoot)
-                }
+        Write-Host "[3/3] $(T 'Msg_Dir')..." -ForegroundColor Gray
+        $Excludes = "Windows|ProgramData|Users|Recycle|System Volume|AppData"
+        $TargetFolders = Get-ChildItem ($CurrentDrive + "\") -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch $Excludes }
+        
+        Foreach ($Dir in $TargetFolders) {
+            Write-Host "   Searching $($Dir.FullName)..." -ForegroundColor DarkGray
+            # tomcat*.exe または catalina.jar を探す (深さ5まで)
+            $Hits = Get-ChildItem -Path $Dir.FullName -Include "tomcat*.exe","catalina.jar" -File -Recurse -Depth 5 -ErrorAction SilentlyContinue
+            Foreach ($H in $Hits) {
+                $Root = Get-TomcatRoot $H.FullName
+                If ($Root) { [void]$TomcatRoots.Add($Root.ToLower()) }
             }
         }
     }
     
     If ($TomcatRoots.Count -eq 0) {
-        Log-Info -Title "Apache Tomcat" -ShortResult (T "NoneFound") -FullDetail "None Tomcat instances detected."
-        If (-not $Silent) { Wait-AndClear }
+        Log-Info -Title "Apache Tomcat" -ShortResult (T "Msg_None") -FullDetail "No Instance found on ${CurrentDrive}. (Tips: 管理者権限で実行してください)"
         return
     }
     
-    Write-Host (T "ResultFound" @($TomcatRoots.Count, "Tomcat")) -ForegroundColor Green
+    Write-Host (T "Msg_Result" @($TomcatRoots.Count, "Tomcat")) -ForegroundColor Green
     
     $Count = 1
     Foreach ($TRoot in $TomcatRoots) {
-        $VersionShort = "Unknown"
-        $VersionRaw = "N/A"
-        $VersionPath = Join-Path $TRoot "bin\version.bat"
-        
-        If (Test-Path $VersionPath) {
-            $VersionRaw = & "$VersionPath" | Out-String
-            If ($VersionRaw -match "Server version:\s+(.*)") { $VersionShort = $Matches[1].Trim() }
+        $VerPath = Join-Path $TRoot "bin\version.bat"
+        $RawV = "N/A"; $ShortV = "Unknown"
+        If (Test-Path $VerPath) {
+            $RawV = & "$VerPath" | Out-String
+            If ($RawV -match "Server version:\s+(.*)") { $ShortV = $Matches[1].Trim() }
+        }
+        $Apps = @()
+        If (Test-Path (Join-Path $TRoot "webapps")) {
+            $Apps = Get-ChildItem (Join-Path $TRoot "webapps") -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -notin @("ROOT","docs","examples","manager","host-manager") }
         }
         
-        $WebappsPath = Join-Path $TRoot "webapps"
-        $EnvList = @()
-        If (Test-Path $WebappsPath) {
-            $DefaultApps = @("ROOT", "docs", "examples", "host-manager", "manager")
-            $Apps = Get-ChildItem -Path $WebappsPath -Directory
-            Foreach ($App in $Apps) {
-                If ($App.Name -notin $DefaultApps) { $EnvList += $App.Name }
-            }
-        }
-        
-        $ShortOutput = "${VersionShort} | $(T 'WebappsInfo'): $($EnvList.Count)"
-        $FullOutput = "Instance [${Count}] Path: ${TRoot}`n${VersionRaw}`nApps: $($EnvList -join ', ')"
-        
-        Log-Info -Title "Tomcat Instance [${Count}]" -ShortResult $ShortOutput -FullDetail $FullOutput
+        Log-Info -Title "Tomcat Instance [${Count}]" -ShortResult "${ShortV} | Apps: $($Apps.Count)" -FullDetail "Root: $TRoot`n$RawV`nWebapps: $($Apps.Name -join ', ')"
         $Count++
     }
-    If (-not $Silent) { Wait-AndClear }
 }

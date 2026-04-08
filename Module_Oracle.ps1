@@ -1,85 +1,56 @@
 # Module_Oracle.ps1
-# Version: 1.5.1
-# Description: Oracle Database 调查模块 (输入体验优化 + PS 5.1 兼容)
+# Version: 1.8.1
+# Description: Oracle 調査モジュール (日本語統一 + 2重Enter回避 + プロンプト改善)
 
 Function Investigate-Oracle {
     Param([Boolean]$Silent = $false)
     
-    $MenuTitle = "Oracle Database $(T 'Searching')"
-    If (-not $Silent) { Write-MenuHeader $MenuTitle }
+    # 画面3 (調査界面) のヘッダーを表示
+    Write-Host "`n$(T 'Ora_Header')" -ForegroundColor Cyan
     
-    # 1. 检查 sqlplus
-    Try {
-        $SqlPlusRaw = & sqlplus -v 2>$null | Out-String
-        If ([string]::IsNullOrWhiteSpace($SqlPlusRaw)) {
-            Log-Info -Title "Oracle Database" -ShortResult (T "NoneFound") -FullDetail "sqlplus not found in PATH."
-            If (-not $Silent) { Wait-AndClear }
-            return
-        }
-    } Catch {
-        Log-Info -Title "Oracle Database" -ShortResult "Error" -FullDetail "Crashed checking sqlplus."
-        If (-not $Silent) { Wait-AndClear }
+    # 入力プロンプト (コロンとスペースを明示)
+    Write-Host (T "Ora_User") -NoNewline; $User = Read-Host
+    Write-Host (T "Ora_Pass") -NoNewline; $Pass = Read-Host -AsSecureString
+    Write-Host (T "Ora_Inst") -NoNewline; $Instance = Read-Host
+    
+    If ([string]::IsNullOrWhiteSpace($User) -or [string]::IsNullOrWhiteSpace($Instance)) {
+        Write-Host "ユーザー名または接続先が空です。調査をスキップします。" -ForegroundColor Yellow
         return
     }
-    
-    $OracleVersion = ($SqlPlusRaw -split "`n" | Select-String "Release").ToString().Trim()
-    
-    # 2. 交互式获取凭据 (优化冒号和空格分割)
-    Write-Host (T "OracleLogin") -ForegroundColor Gray
-    Write-Host ""
-    Write-Host (T "Username") -NoNewline; $User = Read-Host
-    Write-Host (T "Password") -NoNewline; $Pass = Read-Host -AsSecureString
+
     $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($Pass)
-    $PassPlain = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
-    Write-Host (T "Instance") -NoNewline; $Instance = Read-Host
-    
-    If ([string]::IsNullOrWhiteSpace($User) -or [string]::IsNullOrWhiteSpace($PassPlain) -or [string]::IsNullOrWhiteSpace($Instance)) {
-        Write-Host "[Warn] Incomplete input." -ForegroundColor Yellow
-        Wait-AndClear return
-    }
-    
-    Write-Host "`n$(T 'Connecting')" -ForegroundColor Gray
-    
-    # 3. 执行 SQL
-    $ConnStr = "${User}/${PassPlain}@${Instance}"
-    $SqlCmd = @"
-SET HEAD OFF
+    $UnsecurePass = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
+
+    Write-Host "`n$(T 'Ora_Connect')" -ForegroundColor Gray
+
+    # SQL Plus 実行 (内部は英語ヘッダーが出る可能性があるため、出力を成形)
+    $SqlScript = @"
+SET PAGESIZE 100
+SET LINESIZE 200
 SET FEEDBACK OFF
-SET LINESIZE 3000
-SET PAGESIZE 0
-SET TRIMSPOOL ON
-SELECT CS_CPROPERTYNAME || '###' || CS_CPROPERTYVALUE || '###' || CS_CPROPERTYDESC FROM UHR.CONF_SYSCONTROL WHERE CS_CPROPERTYNAME LIKE '%Version%';
+SET HEADING ON
+COLUMN CS_CPROPERTYNAME FORMAT A30
+COLUMN CS_CPROPERTYVALUE FORMAT A40
+COLUMN CS_CPROPERTYDESC FORMAT A50
+SELECT CS_CPROPERTYNAME, CS_CPROPERTYVALUE, CS_CPROPERTYDESC FROM CS_PROPERTY_CNF;
 EXIT;
 "@
-    
-    $SqlOutput = $SqlCmd | & sqlplus -s $ConnStr 2>&1 | Out-String
-    
-    If ($SqlOutput -match "ORA-") {
-        Log-Info -Title "Oracle Database" -ShortResult "Error" -FullDetail "SQL Error: ${SqlOutput}"
-    } Else {
-        # 4. 对齐逻辑处理
-        $Lines = $SqlOutput -split "`r?`n" | Where-Object { $_ -match '###' }
-        If ($Lines.Count -gt 0) {
-            $Data = foreach ($L in $Lines) {
-                if ($L -match '###') {
-                    $Parts = $L -split '###'
-                    New-Object PSObject -Property @{
-                        NAME  = if ($Parts[0]) { $Parts[0].Trim() } else { "" }
-                        VALUE = if ($Parts[1]) { $Parts[1].Trim() } else { "" }
-                        DESC  = if ($Parts[2]) { $Parts[2].Trim() } else { "" }
-                    }
-                }
-            }
-            $MaxName = ($Data | Measure-Object -Property NAME -Maximum).Maximum.Length; if ($MaxName -lt 20) { $MaxName = 20 }
-            $MaxValue = ($Data | Measure-Object -Property VALUE -Maximum).Maximum.Length; if ($MaxValue -lt 20) { $MaxValue = 20 }
-            $HeaderLine = "{0,-$MaxName} | {1,-$MaxValue} | {2}" -f "PROPERTY_NAME", "VALUE", "DESCRIPTION"
-            $Separator  = "-" * ($MaxName + $MaxValue + 30)
-            $FormattedLines = @($HeaderLine, $Separator)
-            foreach ($Item in $Data) { $FormattedLines += "{0,-$MaxName} | {1,-$MaxValue} | {2}" -f $Item.NAME, $Item.VALUE, $Item.DESC }
-            $CleanOutput = $FormattedLines -join "`n"
-        } Else { $CleanOutput = T "NoneFound" }
-        $FullOutput = "Oracle Version: ${OracleVersion}`n`nQuery Result:`n${CleanOutput}"
-        Log-Info -Title "Oracle Database" -ShortResult ("${OracleVersion} | Done") -FullDetail $FullOutput
+    $TmpSql = Join-Path $env:TEMP "tmp_ora.sql"
+    $SqlScript | Set-Content -Path $TmpSql -Encoding ASCII
+
+    Try {
+        $Output = $SqlScript | sqlplus -S "${User}/${UnsecurePass}@${Instance}"
+        
+        If ($Output -like "*ORA-*") {
+            Log-Info -Title "Oracle Database" -ShortResult "接続エラー" -FullDetail "Error: $Output"
+        } Else {
+            # 出力結果の整形と記録
+            $Summary = "データ取得完了"
+            Log-Info -Title "Oracle Database" -ShortResult $Summary -FullDetail $Output
+        }
+    } Catch {
+        Log-Info -Title "Oracle Database" -ShortResult "実行エラー" -FullDetail $_.Exception.Message
+    } Finally {
+        If (Test-Path $TmpSql) { Remove-Item $TmpSql }
     }
-    If (-not $Silent) { Wait-AndClear }
 }
