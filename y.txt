@@ -1,4 +1,4 @@
-調査開始時間: 2026-04-08 18:24:55
+調査開始時間: 2026-04-08 18:31:30
 
 ==================================================
 --- Oracle Database ---
@@ -6,16 +6,22 @@
 Metadata Search SQL:
 SET HEAD OFF
 SET FEEDBACK OFF
-SELECT OWNER FROM ALL_TABLES WHERE UPPER(TABLE_NAME) = 'CS_PROPERTY_CNF' AND ROWNUM = 1;
+SELECT OWNER || '.' || TABLE_NAME FROM ALL_TABLES WHERE UPPER(TABLE_NAME) = 'CONF_SYSCONTROL' AND ROWNUM = 1;
 EXIT;
-Detected Owner: 
-Final Script to Execute:
+Final Script:
+SET PAGESIZE 100
+SET LINESIZE 500
 SET FEEDBACK OFF
 SET HEADING ON
-SET PAGESIZE 100
-SELECT CS_CPROPERTYNAME, CS_CPROPERTYVALUE, CS_CPROPERTYDESC FROM CS_PROPERTY_CNF;
+SET WRAP OFF
+COLUMN CS_CPROPERTYNAME FORMAT A40
+COLUMN CS_CPROPERTYVALUE FORMAT A60
+COLUMN CS_CPROPERTYDESC FORMAT A60
+SELECT CS_CPROPERTYNAME, CS_CPROPERTYVALUE, CS_CPROPERTYDESC 
+FROM  UHR.CONF_SYSCONTROL 
+WHERE CS_CPROPERTYNAME LIKE '%Version%';
 EXIT;
 -------------------------
 --- Raw Output ---
-SELECT CS_CPROPERTYNAME, CS_CPROPERTYVALUE, CS_CPROPERTYDESC FROM CS_PROPERTY_CNF                                                                   * 行1でエラーが発生しました。: ORA-00942: 表またはビューが存在しません。  
+ CS_CPROPERTYNAME			 CS_CPROPERTYVALUE					      CS_CPROPERTYDESC ---------------------------------------- ------------------------------------------------------------ ------------------------------------------------------------ Version 				 2,3,1,8						      HGSEALEDのバ-ジョン FrameVersion				 4.18.4 						      SmartCompanyフレームのバージョン UhrSalary_Version			 2.11							      U-PDS HR Web給与明細システムバージョン UhrCore_Version 			 2.11							      U-PDS HR コアシステムバージョン UhrShoteate_Version			 2.11+genkyo2.11					      U-PDS HR 諸手当申請システムバージョン UhrNencho_Version			 2.11.4+reigetsu2.11.4					      U-PDS HR 年末調整申請システムバージョン UhrShinjo_Version			 2.9							      U-PDS HR 身上調書システムバージョン
 

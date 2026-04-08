@@ -1,6 +1,6 @@
 # Module_Oracle.ps1
-# Version: 2.4.0
-# Description: Oracle 調査モジュール (テーブル・条件修正版 v2.4.0)
+# Version: 2.5.0
+# Description: Oracle 調査モジュール (垂直フォーマット表示 v2.5.0)
 
 Function Investigate-Oracle {
     Param([Boolean]$Silent = $false)
@@ -29,7 +29,7 @@ Function Investigate-Oracle {
     
     Write-Host "`n$(T 'Ora_Connect')" -ForegroundColor Gray
 
-    # --- ステップ1: メタデータから正確な所有者とテーブル名を取得 ---
+    # --- ステップ1: メタデータから正確な所有者とテーブル名を特定 ---
     $MetaSql = "SET HEAD OFF`nSET FEEDBACK OFF`nSELECT OWNER || '.' || TABLE_NAME FROM ALL_TABLES WHERE UPPER(TABLE_NAME) = '$TargetBase' AND ROWNUM = 1;`nEXIT;"
     $MetaSql | Set-Content -Path $TmpSql -Encoding ASCII
     
@@ -38,42 +38,37 @@ Function Investigate-Oracle {
         $MetaRes = (sqlplus -S "${User}/${UnsecurePass}@${Instance}" "@$TmpSql").Trim()
         If (-not [string]::IsNullOrWhiteSpace($MetaRes) -and $MetaRes -notlike "*ORA-*") {
             $FinalFullTable = $MetaRes
-            Write-Host "[Info] Detect Table: $FinalFullTable" -ForegroundColor Cyan
         }
     } Catch {}
 
-    # --- ステップ2: 本番クエリの実行 ---
-    # 条件: WHERE CS_CPROPERTYNAME LIKE '%Version%'
+    # --- ステップ2: 垂直フォーマットでのクエリ実行 ---
+    # 各レコードを NAME, VALUE, DESC の順で縦に並べる
     $MainSql = @"
-SET PAGESIZE 100
-SET LINESIZE 500
+SET PAGESIZE 0
 SET FEEDBACK OFF
-SET HEADING ON
-SET WRAP OFF
-COLUMN CS_CPROPERTYNAME FORMAT A40
-COLUMN CS_CPROPERTYVALUE FORMAT A60
-COLUMN CS_CPROPERTYDESC FORMAT A60
-SELECT CS_CPROPERTYNAME, CS_CPROPERTYVALUE, CS_CPROPERTYDESC 
+SET HEADING OFF
+SET LINESIZE 1000
+SET TERMOUT OFF
+SELECT 
+'NAME  : ' || CS_CPROPERTYNAME || CHR(10) ||
+'VALUE : ' || CS_CPROPERTYVALUE || CHR(10) ||
+'DESC  : ' || CS_CPROPERTYDESC || CHR(10) ||
+'------------------------------------------------------------'
 FROM $FinalFullTable 
 WHERE CS_CPROPERTYNAME LIKE '%Version%';
 EXIT;
 "@
     $MainSql | Set-Content -Path $TmpSql -Encoding ASCII
 
-    # 実行ログ
-    $LogDetail = "--- SQL Execution Log ---`n"
-    $LogDetail += "Metadata Search SQL:`n$MetaSql`n"
-    $LogDetail += "Final Script:`n$MainSql`n"
-    $LogDetail += "-------------------------`n"
-
     Try {
         $Output = sqlplus -S "${User}/${UnsecurePass}@${Instance}" "@$TmpSql"
-        $LogDetail += "--- Raw Output ---`n$Output"
-
+        
         If ($Output -like "*ORA-*") {
-            Log-Info -Title "Oracle Database" -ShortResult "取得失敗" -FullDetail $LogDetail
+            Log-Info -Title "Oracle Database" -ShortResult "取得失敗" -FullDetail "Error: $Output"
         } Else {
-            Log-Info -Title "Oracle Database" -ShortResult "データ取得完了" -FullDetail $LogDetail
+            # 出力が空の場合のケア
+            If ([string]::IsNullOrWhiteSpace($Output)) { $Output = "該当するデータが見つかりませんでした。 (Condition: LIKE '%Version%')" }
+            Log-Info -Title "Oracle Database" -ShortResult "データ取得完了" -FullDetail $Output
         }
     } Catch {
         Log-Info -Title "Oracle Database" -ShortResult "実行エラー" -FullDetail "Exception: $($_.Exception.Message)"
