@@ -1,6 +1,6 @@
 # Module_Utils.ps1
-# Version: 1.9.0
-# Description: 共通ユーティリティ (日本語完全統一 + 1.9.0 Turbo対応)
+# Version: 2.0.0
+# Description: 共通ユーティリティ (日本語完全統一 + v2.0 瞬時検索対応)
 
 $Global:ReportFile = "Investigation_Report.txt"
 $Global:I18n = @{
@@ -20,8 +20,8 @@ $Global:I18n = @{
         "Opt_Lang"         = "言語設定 (日本語固定)"
         "Opt_Back"         = "メインメニューに戻る"
         "ProcSearch"       = "実行中プロセスの検索中..."
-        "SvcSearch"        = "Windowsサービスの検索中..."
-        "PathSearch"       = "ディレクトリの保底検索中..."
+        "SvcSearch"        = "レジストリ・サービス情報の検索中..."
+        "PathSearch"       = "ディスク探索 (最終手段) 開始..."
         "Msg_Wait"         = "Enterキーを押してメニューに戻る..."
         "Msg_InputFile"    = "【入力】レポート名 (デフォルト: Investigation_Report.txt): "
         "Msg_Start"        = "調査開始時間"
@@ -53,7 +53,6 @@ Function Invoke-Menu {
         [Int]$Default = 0
     )
     $Selected = $Default
-    # 既存のキー入力をクリア
     While ($Host.UI.RawUI.KeyAvailable) { $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown") }
 
     While ($true) {
@@ -96,4 +95,4 @@ Function Wait-AndClear {
     [void](Read-Host)
 }
 
-Write-Host "[INIT] Module_Utils v1.9.0 ロード完了" -ForegroundColor Gray
+Write-Host "[INIT] Module_Utils v2.0.0 ロード完了" -ForegroundColor Gray
