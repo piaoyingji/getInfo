@@ -1,6 +1,6 @@
 # Module_Utils.ps1
-# Version: 3.1.0
-# Description: 共通ユーティリティ (v3.1.0 プロセス排除・シンプル出力版)
+# Version: 3.2.0
+# Description: 共通ユーティリティ (v3.2.0 Oracle 出力バグ修正版)
 
 $Global:ReportFile = "Investigation_Report.txt"
 $Global:I18n = @{
@@ -87,7 +87,6 @@ Function Log-Info {
     Param([String]$Title, [String]$ShortResult, [String]$FullDetail)
     Write-Host ("[RESULT] " + $Title + ": " + $ShortResult) -ForegroundColor Green
     $Content = ("="*50 + "`n--- " + $Title + " ---`n" + $FullDetail + "`n")
-    # 不要な過程を省くため、空の出力は記録しない
     If (-not [string]::IsNullOrWhiteSpace($FullDetail)) {
         Add-Content -Path $Global:ReportFile -Value $Content -Encoding UTF8
     }
@@ -98,4 +97,4 @@ Function Wait-AndClear {
     [void](Read-Host)
 }
 
-Write-Host "[INIT] Module_Utils v3.1.0 ロード完了" -ForegroundColor Gray
+Write-Host "[INIT] Module_Utils v3.2.0 ロード完了" -ForegroundColor Gray

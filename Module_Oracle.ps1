@@ -1,6 +1,6 @@
 # Module_Oracle.ps1
-# Version: 3.1.0
-# Description: Oracle 調査モジュール (ご指定SQL実行・結果のみ出力版)
+# Version: 3.2.0
+# Description: Oracle 調査モジュール (出力バグ修正・NVL対応 v3.2.0)
 
 Function Investigate-Oracle {
     Param([Boolean]$Silent = $false)
@@ -31,40 +31,41 @@ Function Investigate-Oracle {
     # ご指定のテーブル: {ユーザー名}.CONF_SYSCONTROL
     $TargetTable = "${User}.CONF_SYSCONTROL"
     
-    # 極限までシンプルにデータのみを抽出するSQL
+    # SQL設定修正: TERMOUT ON にして出力を有効化
+    # また、NVLを使用してNULLによる結合消失を防止
     $MainSql = @"
 SET PAGESIZE 0
 SET FEEDBACK OFF
 SET HEADING OFF
-SET TERMOUT OFF
+SET TERMOUT ON
 SET ECHO OFF
 SET VERIFY OFF
 SET LINESIZE 1000
 SELECT 
-'NAME  : ' || CS_CPROPERTYNAME || CHR(10) ||
-'VALUE : ' || CS_CPROPERTYVALUE || CHR(10) ||
-'DESC  : ' || CS_CPROPERTYDESC || CHR(10) ||
+'NAME  : ' || NVL(CS_CPROPERTYNAME, ' ') || CHR(10) ||
+'VALUE : ' || NVL(CS_CPROPERTYVALUE, ' ') || CHR(10) ||
+'DESC  : ' || NVL(CS_CPROPERTYDESC, ' ') || CHR(10) ||
 '------------------------------------------------------------'
 FROM $TargetTable 
 WHERE CS_CPROPERTYNAME LIKE '%Version%';
 EXIT;
 "@
-    # ASCIIで保存することでバインド変数エラー(SP2-0552)を完全に防止
+    # ASCIIで保存してSP2-0552エラーを防止
     $MainSql | Set-Content -Path $TmpSql -Encoding ASCII
 
     Try {
         $Output = sqlplus -S "${User}/${UnsecurePass}@${Instance}" "@$TmpSql"
         
-        # 過程やSQL文は含めず、純粋な出力結果のみを処理
         If ($Output -like "*ORA-*") {
             Write-Host "[ERROR] Oracle実行中にエラーが発生しました。" -ForegroundColor Red
             Log-Info -Title "Oracle Database" -ShortResult "取得失敗" -FullDetail "Oracle Error: $Output"
         } Else {
-            If ([string]::IsNullOrWhiteSpace($Output)) { 
-                $Output = "該当データなし" 
+            # 余分な空白行を取り除いて結果を判定
+            $CleanOutput = $Output.Trim()
+            If ([string]::IsNullOrWhiteSpace($CleanOutput)) { 
+                $CleanOutput = "該当データなし" 
             }
-            # 過程を省き、結果のみを記録
-            Log-Info -Title "Oracle Database" -ShortResult "完了" -FullDetail $Output.Trim()
+            Log-Info -Title "Oracle Database" -ShortResult "完了" -FullDetail $CleanOutput
         }
     } Catch {
         Log-Info -Title "Oracle Database" -ShortResult "例外発生" -FullDetail "Msg: $($_.Exception.Message)"
