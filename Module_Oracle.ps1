@@ -1,6 +1,6 @@
 # Module_Oracle.ps1
-# Version: 2.7.0
-# Description: Oracle 調査モジュール (ご指定SQL再現・垂直整列・ログ出力版)
+# Version: 3.1.0
+# Description: Oracle 調査モジュール (ご指定SQL実行・結果のみ出力版)
 
 Function Investigate-Oracle {
     Param([Boolean]$Silent = $false)
@@ -17,7 +17,7 @@ Function Investigate-Oracle {
     Write-Host (T "Ora_Inst") -NoNewline; $Instance = Read-Host
     
     If ([string]::IsNullOrWhiteSpace($User) -or [string]::IsNullOrWhiteSpace($Instance)) {
-        Write-Host "ユーザー名または接続先が空です。調査をスキップします。" -ForegroundColor Yellow
+        Write-Host "ユーザー名または接続先が空です。" -ForegroundColor Yellow
         return
     }
 
@@ -28,17 +28,17 @@ Function Investigate-Oracle {
     
     Write-Host "`n$(T 'Ora_Connect')" -ForegroundColor Gray
 
-    # --- ご指定のSQL文を構築 ---
-    # UHRの部分は入力されたユーザー名 ($User) を使用します
+    # ご指定のテーブル: {ユーザー名}.CONF_SYSCONTROL
     $TargetTable = "${User}.CONF_SYSCONTROL"
     
-    # 垂直フォーマット用のSQL
-    # LABEL : VALUE の形式で1レコードにつき複数行出力し、最後に区切り線を入れます
+    # 極限までシンプルにデータのみを抽出するSQL
     $MainSql = @"
 SET PAGESIZE 0
 SET FEEDBACK OFF
 SET HEADING OFF
 SET TERMOUT OFF
+SET ECHO OFF
+SET VERIFY OFF
 SET LINESIZE 1000
 SELECT 
 'NAME  : ' || CS_CPROPERTYNAME || CHR(10) ||
@@ -49,26 +49,22 @@ FROM $TargetTable
 WHERE CS_CPROPERTYNAME LIKE '%Version%';
 EXIT;
 "@
+    # ASCIIで保存することでバインド変数エラー(SP2-0552)を完全に防止
     $MainSql | Set-Content -Path $TmpSql -Encoding ASCII
 
-    # 実行ログの構築 (ご要望通り実行SQLをログに含めます)
-    $LogDetail = "--- SQL Execution Log ---`n"
-    $LogDetail += "Executed SQL:`n$MainSql`n"
-    $LogDetail += "-------------------------`n"
-
     Try {
-        # 安定の一時ファイル方式で実行
         $Output = sqlplus -S "${User}/${UnsecurePass}@${Instance}" "@$TmpSql"
         
+        # 過程やSQL文は含めず、純粋な出力結果のみを処理
         If ($Output -like "*ORA-*") {
-            $LogDetail += "--- Error Output ---`n$Output"
-            Log-Info -Title "Oracle Database" -ShortResult "エラー発生" -FullDetail $LogDetail
+            Write-Host "[ERROR] Oracle実行中にエラーが発生しました。" -ForegroundColor Red
+            Log-Info -Title "Oracle Database" -ShortResult "取得失敗" -FullDetail "Oracle Error: $Output"
         } Else {
             If ([string]::IsNullOrWhiteSpace($Output)) { 
-                $Output = "該当データなし (Table: $TargetTable, Condition: LIKE '%Version%')" 
+                $Output = "該当データなし" 
             }
-            $LogDetail += "--- Query Results ---`n$Output"
-            Log-Info -Title "Oracle Database" -ShortResult "成功" -FullDetail $LogDetail
+            # 過程を省き、結果のみを記録
+            Log-Info -Title "Oracle Database" -ShortResult "完了" -FullDetail $Output.Trim()
         }
     } Catch {
         Log-Info -Title "Oracle Database" -ShortResult "例外発生" -FullDetail "Msg: $($_.Exception.Message)"

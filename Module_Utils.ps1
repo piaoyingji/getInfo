@@ -1,6 +1,6 @@
 # Module_Utils.ps1
-# Version: 2.7.0
-# Description: 共通ユーティリティ (v2.7.0 Oracle 垂直対照フォーマット・ログ版)
+# Version: 3.1.0
+# Description: 共通ユーティリティ (v3.1.0 プロセス排除・シンプル出力版)
 
 $Global:ReportFile = "Investigation_Report.txt"
 $Global:I18n = @{
@@ -87,7 +87,10 @@ Function Log-Info {
     Param([String]$Title, [String]$ShortResult, [String]$FullDetail)
     Write-Host ("[RESULT] " + $Title + ": " + $ShortResult) -ForegroundColor Green
     $Content = ("="*50 + "`n--- " + $Title + " ---`n" + $FullDetail + "`n")
-    Add-Content -Path $Global:ReportFile -Value $Content -Encoding UTF8
+    # 不要な過程を省くため、空の出力は記録しない
+    If (-not [string]::IsNullOrWhiteSpace($FullDetail)) {
+        Add-Content -Path $Global:ReportFile -Value $Content -Encoding UTF8
+    }
 }
 
 Function Wait-AndClear {
@@ -95,4 +98,4 @@ Function Wait-AndClear {
     [void](Read-Host)
 }
 
-Write-Host "[INIT] Module_Utils v2.7.0 ロード完了" -ForegroundColor Gray
+Write-Host "[INIT] Module_Utils v3.1.0 ロード完了" -ForegroundColor Gray
