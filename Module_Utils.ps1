@@ -1,6 +1,6 @@
 # Module_Utils.ps1
-# Version: 1.4.0
-# Description: 通用工具函数模块 (日本語版专用)
+# Version: 1.5.0
+# Description: 通用工具函数模块 (兼容性优化 + 交互式菜单)
 
 # --- 全局配置 ---
 If (-not $Global:ReportFile) { $Global:ReportFile = "Investigation_Report.txt" }
@@ -10,11 +10,12 @@ $Global:Lang = "ja-JP"
 $Global:I18n = @{
     "ja-JP" = @{
         "MenuHeader"     = "サーバー一括調査ツール"
-        "MenuOption1"    = "[1] 全量調査 (Apache + Tomcat + Oracle)"
-        "MenuOption2"    = "[2] Apache HTTP Server 調査"
-        "MenuOption3"    = "[3] Apache Tomcat 調査"
-        "MenuOption4"    = "[4] Oracle Database 調査"
-        "MenuOptionExit" = "[5] 終了"
+        "MenuInstructions" = "矢印キー [↑/↓] で移動、[Enter] で決定"
+        "MenuOption1"    = "全量調査 (Apache + Tomcat + Oracle)"
+        "MenuOption2"    = "Apache HTTP Server 调查"
+        "MenuOption3"    = "Apache Tomcat 调查"
+        "MenuOption4"    = "Oracle Database 调查"
+        "MenuOptionExit" = "終了"
         "AskFilename"    = "調査結果のファイル名を入力してください (デフォルト: Investigation_Report.txt)"
         "StartTime"      = "調査開始時間"
         "Searching"      = "検索中"
@@ -45,16 +46,62 @@ Function T {
     return $Str
 }
 
-# --- 核心工具関数 ---
+# --- 交互式菜单逻辑 (兼容 PS 5.1+) ---
+Function Show-Menu {
+    Param(
+        [String]$Title,
+        [String[]]$Options,
+        [Int]$SelectedIndex = 0
+    )
+
+    $OriginalPos = $Host.UI.RawUI.CursorPosition
+    $CurrentIndex = $SelectedIndex
+    $Running = $true
+
+    While ($Running) {
+        $Host.UI.RawUI.CursorPosition = $OriginalPos
+        Write-MenuHeader $Title
+        Write-Host (T "MenuInstructions") -ForegroundColor Gray
+        Write-Host ""
+
+        For ($i = 0; $i -lt $Options.Count; $i++) {
+            If ($i -eq $CurrentIndex) {
+                Write-Host " > $($Options[$i])" -ForegroundColor Cyan -BackgroundColor DarkBlue
+            } Else {
+                Write-Host "   $($Options[$i])" -ForegroundColor White
+            }
+        }
+
+        $Key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown").VirtualKeyCode
+        
+        Switch ($Key) {
+            38 { # Up Arrow
+                $CurrentIndex--
+                If ($CurrentIndex -lt 0) { $CurrentIndex = $Options.Count - 1 }
+            }
+            40 { # Down Arrow
+                $CurrentIndex++
+                If ($CurrentIndex -ge $Options.Count) { $CurrentIndex = 0 }
+            }
+            13 { # Enter
+                $Running = $false
+            }
+        }
+    }
+    return $CurrentIndex
+}
+
+# --- 核心工具函数 ---
 
 Function Write-ToReport {
     Param([String]$Title, [String]$Content)
     $Divider = "=" * 50
     $Header = "--- ${Title} ---"
-    Add-Content -Path $Global:ReportFile -Value $Divider
-    Add-Content -Path $Global:ReportFile -Value $Header
-    Add-Content -Path $Global:ReportFile -Value $Content
-    Add-Content -Path $Global:ReportFile -Value ""
+    # 强制使用 UTF8 以增强兼容性
+    Add-Content -Path $Global:ReportFile -Value $Divider -Encoding UTF8
+    Add-Content -Path $Global:ReportFile -Value $Header -Encoding UTF8
+    Add-Content -Path $Global:ReportFile -Value $Content -Encoding UTF8
+    Add-Content -Path $Global:ReportFile -Value "" -Encoding UTF8
 }
 
 Function Log-Info {
@@ -65,12 +112,12 @@ Function Log-Info {
 
 Function Write-MenuHeader {
     Param([String]$MenuTitle)
-    Clear-Host
+    # 不清理控制台以防部分终端显示异常，改为重排
+    # Clear-Host
     $Line = "*" * 60
     Write-Host $Line -ForegroundColor Cyan
     Write-Host ("*  " + (T "MenuHeader") + " - ${MenuTitle}") -ForegroundColor Cyan
     Write-Host $Line -ForegroundColor Cyan
-    Write-Host ""
 }
 
 Function Wait-AndClear {
@@ -78,4 +125,4 @@ Function Wait-AndClear {
     Read-Host
 }
 
-Write-Host "[INIT] Module_Utils Loaded (Japanese version v1.4.0)" -ForegroundColor Gray
+Write-Host "[INIT] Module_Utils Loaded (v1.5.0 Compatible Mode)" -ForegroundColor Gray

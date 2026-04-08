@@ -1,6 +1,6 @@
 # Module_Oracle.ps1
-# Version: 1.3.1
-# Description: Oracle Database 调查模块 (全多语言支持 + 对齐格式化)
+# Version: 1.5.0
+# Description: Oracle Database 调查模块 (PS 5.1 互换性强化)
 
 Function Investigate-Oracle {
     Param([Boolean]$Silent = $false)
@@ -19,12 +19,14 @@ Function Investigate-Oracle {
     $OracleVersion = ($SqlPlusRaw -split "`n" | Select-String "Release").ToString().Trim()
     
     # 2. 交互式获取凭据
-    Write-Host "--- Oracle Login ---" -ForegroundColor Gray
-    $User = Read-Host "Username"
-    $Pass = Read-Host "Password" -AsSecureString
+    Write-Host (T "OracleLogin") -ForegroundColor Gray
+    Write-Host (T "Username") -NoNewline; $User = Read-Host
+    Write-Host (T "Password") -NoNewline; $Pass = Read-Host -AsSecureString
+    
     $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($Pass)
     $PassPlain = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
-    $Instance = Read-Host "Host/SID (e.g. 127.0.0.1/orcl)"
+    
+    Write-Host (T "Instance") -NoNewline; $Instance = Read-Host
     
     If ([string]::IsNullOrWhiteSpace($User) -or [string]::IsNullOrWhiteSpace($PassPlain) -or [string]::IsNullOrWhiteSpace($Instance)) {
         Write-Host "[Warn] Incomplete input." -ForegroundColor Yellow
@@ -32,7 +34,7 @@ Function Investigate-Oracle {
         return
     }
     
-    Write-Host "`n[Action] Connecting..." -ForegroundColor Gray
+    Write-Host "`n$(T 'Connecting')" -ForegroundColor Gray
     
     # 3. 执行 SQL
     $ConnStr = "${User}/${PassPlain}@${Instance}"
@@ -56,11 +58,13 @@ EXIT;
         
         If ($Lines.Count -gt 0) {
             $Data = foreach ($L in $Lines) {
-                $Parts = $L -split '###'
-                [PSCustomObject]@{
-                    NAME  = if ($Parts[0]) { $Parts[0].Trim() } else { "" }
-                    VALUE = if ($Parts[1]) { $Parts[1].Trim() } else { "" }
-                    DESC  = if ($Parts[2]) { $Parts[2].Trim() } else { "" }
+                if ($L -match '###') {
+                    $Parts = $L -split '###'
+                    New-Object PSObject -Property @{
+                        NAME  = if ($Parts[0]) { $Parts[0].Trim() } else { "" }
+                        VALUE = if ($Parts[1]) { $Parts[1].Trim() } else { "" }
+                        DESC  = if ($Parts[2]) { $Parts[2].Trim() } else { "" }
+                    }
                 }
             }
             
@@ -82,7 +86,7 @@ EXIT;
         }
         
         $FullOutput = "Oracle Version: ${OracleVersion}`n`nQuery Result:`n${CleanOutput}"
-        Log-Info -Title "Oracle Database" -ShortResult ("${OracleVersion} | " + (T "Searching") + " Done") -FullDetail $FullOutput
+        Log-Info -Title "Oracle Database" -ShortResult ("${OracleVersion} | Done") -FullDetail $FullOutput
     }
     
     If (-not $Silent) { Wait-AndClear }
