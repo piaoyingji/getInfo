@@ -1,6 +1,6 @@
 # Module_Utils.ps1
-# Version: 1.5.0
-# Description: 通用工具函数模块 (兼容性优化 + 交互式菜单)
+# Version: 1.5.1
+# Description: 通用工具函数模块 (日本語専用 + 交互式メニュー + 入力改善)
 
 # --- 全局配置 ---
 If (-not $Global:ReportFile) { $Global:ReportFile = "Investigation_Report.txt" }
@@ -12,11 +12,17 @@ $Global:I18n = @{
         "MenuHeader"     = "サーバー一括調査ツール"
         "MenuInstructions" = "矢印キー [↑/↓] で移動、[Enter] で決定"
         "MenuOption1"    = "全量調査 (Apache + Tomcat + Oracle)"
-        "MenuOption2"    = "Apache HTTP Server 调查"
+        "MenuOption2"    = "Apache HTTP Server 調査"
         "MenuOption3"    = "Apache Tomcat 调查"
         "MenuOption4"    = "Oracle Database 调查"
+        "MenuOptionSettings" = "設定 (言語/環境)"
         "MenuOptionExit" = "終了"
-        "AskFilename"    = "調査結果のファイル名を入力してください (デフォルト: Investigation_Report.txt)"
+        
+        "SubMenuHeader"  = "設定メニュー"
+        "LangChoice"     = "言語選択 (現在は日本語のみ)"
+        "ReturnMain"     = "メインメニューに戻る"
+        
+        "AskFilename"    = "調査結果のファイル名を入力してください (デフォルト: Investigation_Report.txt): "
         "StartTime"      = "調査開始時間"
         "Searching"      = "検索中"
         "ResultFound"    = "{1} が {0} 件見つかりました。"
@@ -29,10 +35,11 @@ $Global:I18n = @{
         "SSL_Off"        = "SSL 無効"
         "Expr_Date"      = "有効期限"
         "WebappsInfo"    = "デプロイ済み環境"
+        
         "OracleLogin"    = "--- Oracle ログイン ---"
-        "Username"       = "ユーザー名"
-        "Password"       = "パスワード"
-        "Instance"       = "接続先/SID"
+        "Username"       = "ユーザー名: "
+        "Password"       = "パスワード: "
+        "Instance"       = "接続先/SID (127.0.0.1/orcl): "
         "Connecting"     = "[Action] 接続中..."
     }
 }
@@ -46,7 +53,7 @@ Function T {
     return $Str
 }
 
-# --- 交互式菜单逻辑 (兼容 PS 5.1+) ---
+# --- 交互式メニュー逻辑 ---
 Function Show-Menu {
     Param(
         [String]$Title,
@@ -66,15 +73,16 @@ Function Show-Menu {
 
         For ($i = 0; $i -lt $Options.Count; $i++) {
             If ($i -eq $CurrentIndex) {
-                Write-Host " > $($Options[$i])" -ForegroundColor Cyan -BackgroundColor DarkBlue
+                Write-Host " >> $($Options[$i])" -ForegroundColor Cyan -BackgroundColor DarkBlue
             } Else {
-                Write-Host "   $($Options[$i])" -ForegroundColor White
+                Write-Host "    $($Options[$i])" -ForegroundColor White
             }
         }
 
-        $Key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown").VirtualKeyCode
+        $KeyInfo = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+        $KeyCode = $KeyInfo.VirtualKeyCode
         
-        Switch ($Key) {
+        Switch ($KeyCode) {
             38 { # Up Arrow
                 $CurrentIndex--
                 If ($CurrentIndex -lt 0) { $CurrentIndex = $Options.Count - 1 }
@@ -97,7 +105,6 @@ Function Write-ToReport {
     Param([String]$Title, [String]$Content)
     $Divider = "=" * 50
     $Header = "--- ${Title} ---"
-    # 强制使用 UTF8 以增强兼容性
     Add-Content -Path $Global:ReportFile -Value $Divider -Encoding UTF8
     Add-Content -Path $Global:ReportFile -Value $Header -Encoding UTF8
     Add-Content -Path $Global:ReportFile -Value $Content -Encoding UTF8
@@ -112,8 +119,6 @@ Function Log-Info {
 
 Function Write-MenuHeader {
     Param([String]$MenuTitle)
-    # 不清理控制台以防部分终端显示异常，改为重排
-    # Clear-Host
     $Line = "*" * 60
     Write-Host $Line -ForegroundColor Cyan
     Write-Host ("*  " + (T "MenuHeader") + " - ${MenuTitle}") -ForegroundColor Cyan
@@ -125,4 +130,4 @@ Function Wait-AndClear {
     Read-Host
 }
 
-Write-Host "[INIT] Module_Utils Loaded (v1.5.0 Compatible Mode)" -ForegroundColor Gray
+Write-Host "[INIT] Module_Utils Loaded (v1.5.1)" -ForegroundColor Gray

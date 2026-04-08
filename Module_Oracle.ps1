@@ -1,6 +1,6 @@
 # Module_Oracle.ps1
-# Version: 1.5.0
-# Description: Oracle Database 调查模块 (PS 5.1 互换性强化)
+# Version: 1.5.1
+# Description: Oracle Database 调查模块 (输入体验优化 + PS 5.1 兼容)
 
 Function Investigate-Oracle {
     Param([Boolean]$Silent = $false)
@@ -8,30 +8,34 @@ Function Investigate-Oracle {
     $MenuTitle = "Oracle Database $(T 'Searching')"
     If (-not $Silent) { Write-MenuHeader $MenuTitle }
     
-    # 1. 检查 sqlplus 是否可用
-    $SqlPlusRaw = & sqlplus -v 2>$null | Out-String
-    If ([string]::IsNullOrWhiteSpace($SqlPlusRaw)) {
-        Log-Info -Title "Oracle Database" -ShortResult (T "NoneFound") -FullDetail "sqlplus not found in PATH."
+    # 1. 检查 sqlplus
+    Try {
+        $SqlPlusRaw = & sqlplus -v 2>$null | Out-String
+        If ([string]::IsNullOrWhiteSpace($SqlPlusRaw)) {
+            Log-Info -Title "Oracle Database" -ShortResult (T "NoneFound") -FullDetail "sqlplus not found in PATH."
+            If (-not $Silent) { Wait-AndClear }
+            return
+        }
+    } Catch {
+        Log-Info -Title "Oracle Database" -ShortResult "Error" -FullDetail "Crashed checking sqlplus."
         If (-not $Silent) { Wait-AndClear }
         return
     }
     
     $OracleVersion = ($SqlPlusRaw -split "`n" | Select-String "Release").ToString().Trim()
     
-    # 2. 交互式获取凭据
+    # 2. 交互式获取凭据 (优化冒号和空格分割)
     Write-Host (T "OracleLogin") -ForegroundColor Gray
+    Write-Host ""
     Write-Host (T "Username") -NoNewline; $User = Read-Host
     Write-Host (T "Password") -NoNewline; $Pass = Read-Host -AsSecureString
-    
     $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($Pass)
     $PassPlain = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
-    
     Write-Host (T "Instance") -NoNewline; $Instance = Read-Host
     
     If ([string]::IsNullOrWhiteSpace($User) -or [string]::IsNullOrWhiteSpace($PassPlain) -or [string]::IsNullOrWhiteSpace($Instance)) {
         Write-Host "[Warn] Incomplete input." -ForegroundColor Yellow
-        Wait-AndClear
-        return
+        Wait-AndClear return
     }
     
     Write-Host "`n$(T 'Connecting')" -ForegroundColor Gray
@@ -55,7 +59,6 @@ EXIT;
     } Else {
         # 4. 对齐逻辑处理
         $Lines = $SqlOutput -split "`r?`n" | Where-Object { $_ -match '###' }
-        
         If ($Lines.Count -gt 0) {
             $Data = foreach ($L in $Lines) {
                 if ($L -match '###') {
@@ -67,27 +70,16 @@ EXIT;
                     }
                 }
             }
-            
-            $MaxName = ($Data | Measure-Object -Property NAME -Maximum -ErrorAction SilentlyContinue).Maximum.Length
-            if ($MaxName -lt 20) { $MaxName = 20 }
-            $MaxValue = ($Data | Measure-Object -Property VALUE -Maximum -ErrorAction SilentlyContinue).Maximum.Length
-            if ($MaxValue -lt 20) { $MaxValue = 20 }
-            
+            $MaxName = ($Data | Measure-Object -Property NAME -Maximum).Maximum.Length; if ($MaxName -lt 20) { $MaxName = 20 }
+            $MaxValue = ($Data | Measure-Object -Property VALUE -Maximum).Maximum.Length; if ($MaxValue -lt 20) { $MaxValue = 20 }
             $HeaderLine = "{0,-$MaxName} | {1,-$MaxValue} | {2}" -f "PROPERTY_NAME", "VALUE", "DESCRIPTION"
             $Separator  = "-" * ($MaxName + $MaxValue + 30)
-            
             $FormattedLines = @($HeaderLine, $Separator)
-            foreach ($Item in $Data) {
-                $FormattedLines += "{0,-$MaxName} | {1,-$MaxValue} | {2}" -f $Item.NAME, $Item.VALUE, $Item.DESC
-            }
+            foreach ($Item in $Data) { $FormattedLines += "{0,-$MaxName} | {1,-$MaxValue} | {2}" -f $Item.NAME, $Item.VALUE, $Item.DESC }
             $CleanOutput = $FormattedLines -join "`n"
-        } Else {
-            $CleanOutput = T "NoneFound"
-        }
-        
+        } Else { $CleanOutput = T "NoneFound" }
         $FullOutput = "Oracle Version: ${OracleVersion}`n`nQuery Result:`n${CleanOutput}"
         Log-Info -Title "Oracle Database" -ShortResult ("${OracleVersion} | Done") -FullDetail $FullOutput
     }
-    
     If (-not $Silent) { Wait-AndClear }
 }
