@@ -1,6 +1,6 @@
 # Module_Oracle.ps1
-# Version: 1.0.0
-# Description: Oracle Database 调查模块 (容错增强版)
+# Version: 1.2.1
+# Description: Oracle Database 调查模块 (对齐格式化版)
 
 Function Investigate-Oracle {
     Param([Boolean]$Silent = $false)
@@ -33,13 +33,15 @@ Function Investigate-Oracle {
     
     Write-Host "`n[Action] 正在连接数据库并执行查询..." -ForegroundColor Gray
     
-    # 3. 执行 SQL
+    # 3. 执行 SQL (使用特定分隔符以便后续处理)
     $ConnStr = "${User}/${PassPlain}@${Instance}"
     $SqlCmd = @"
 SET HEAD OFF
 SET FEEDBACK OFF
-SET LINESIZE 2000
-SELECT CS_CPROPERTYNAME || ' | ' || CS_CPROPERTYVALUE || ' | ' || CS_CPROPERTYDESC FROM UHR.CONF_SYSCONTROL WHERE CS_CPROPERTYNAME LIKE '%Version%';
+SET LINESIZE 3000
+SET PAGESIZE 0
+SET TRIMSPOOL ON
+SELECT CS_CPROPERTYNAME || '###' || CS_CPROPERTYVALUE || '###' || CS_CPROPERTYDESC FROM UHR.CONF_SYSCONTROL WHERE CS_CPROPERTYNAME LIKE '%Version%';
 EXIT;
 "@
     
@@ -50,11 +52,40 @@ EXIT;
         $FullOutput = "Oracle Version: ${OracleVersion}`n查询报错: ${SqlOutput}"
         Log-Info -Title "Oracle Database" -ShortResult $ShortOutput -FullDetail $FullOutput
     } Else {
-        $CleanOutput = $SqlOutput.Trim()
-        If ([string]::IsNullOrWhiteSpace($CleanOutput)) { $CleanOutput = "无 (未找到相关业务版本配置数据)" }
+        # 4. 对齐逻辑处理
+        $Lines = $SqlOutput -split "`r?`n" | Where-Object { $_ -match '###' }
+        
+        If ($Lines.Count -gt 0) {
+            $Data = foreach ($L in $Lines) {
+                $Parts = $L -split '###'
+                [PSCustomObject]@{
+                    NAME  = if ($Parts[0]) { $Parts[0].Trim() } else { "" }
+                    VALUE = if ($Parts[1]) { $Parts[1].Trim() } else { "" }
+                    DESC  = if ($Parts[2]) { $Parts[2].Trim() } else { "" }
+                }
+            }
+            
+            # 计算最大列宽
+            $MaxName = ($Data | Measure-Object -Property NAME -Maximum -ErrorAction SilentlyContinue).Maximum.Length
+            if ($MaxName -lt 20) { $MaxName = 20 }
+            $MaxValue = ($Data | Measure-Object -Property VALUE -Maximum -ErrorAction SilentlyContinue).Maximum.Length
+            if ($MaxValue -lt 20) { $MaxValue = 20 }
+            
+            # 构造表头
+            $HeaderLine = "{0,-$MaxName} | {1,-$MaxValue} | {2}" -f "PROPERTY_NAME", "VALUE", "DESCRIPTION"
+            $Separator  = "-" * ($MaxName + $MaxValue + 30)
+            
+            $FormattedLines = @($HeaderLine, $Separator)
+            foreach ($Item in $Data) {
+                $FormattedLines += "{0,-$MaxName} | {1,-$MaxValue} | {2}" -f $Item.NAME, $Item.VALUE, $Item.DESC
+            }
+            $CleanOutput = $FormattedLines -join "`n"
+        } Else {
+            $CleanOutput = "无 (未找到相关业务版本配置数据)"
+        }
         
         $ShortOutput = "${OracleVersion} | 系统版本数据已获取"
-        $FullOutput = "Oracle 版本: ${OracleVersion}`n查询结果:`n${CleanOutput}"
+        $FullOutput = "Oracle 版本: ${OracleVersion}`n`n查询结果:`n${CleanOutput}"
         
         Log-Info -Title "Oracle Database" -ShortResult $ShortOutput -FullDetail $FullOutput
     }
