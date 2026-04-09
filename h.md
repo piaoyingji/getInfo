@@ -1,6 +1,6 @@
 # Investigation Report
 
-- **Start Time**: 2026-04-09 16:26:58
+- **Start Time**: 2026-04-09 16:36:58
 
 
 ## Oracle Database
@@ -17,11 +17,23 @@
 > Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
 
 #### システム設定表 (System.Object[])
-| PROPERTY_NAME              | VALUE |
-| :------------------------- | :---- |
-| S                          |       |
-| 1  SELECT CS_CPROPERTYNAME |       |
-| 2                          |       |
+| CS_ID        | CS_CCUSTOMERID | CS_CPROPERTYNAME    | CS_CPROPERTYVALUE     | CS_CPROPERTYDESC          |
+| :----------- | :------------- | :------------------ | :-------------------- | :------------------------ |
+| CS_CCATEGORY | CS             | CS_CMODIFIERUSERID  | CS_DMODI              | VERSIONNO                 |
+| 1000000159   | 00             | Version             | 2,3,1,8               | HGSEALEDのバ-ジョン            |
+| hgsealed     | 0              | BAT                 | 15-04-17              | 1                         |
+| 1000000016   | 00             | FrameVersion        | 4.18.4                | SmartCompanyフレームのバージョン    |
+|              | 1              | BAT                 | 24-07-02              | 1                         |
+| 201          | 01             | UhrSalary_Version   | 2.11                  | U-PDS HR Web給与明細システムバージョン |
+| uhr_salary   | 0              | SALARY_v2.11        | 24-07-02              | 0                         |
+| 202          | 01             | UhrCore_Version     | 2.11                  | U-PDS HR コアシステムバージョン      |
+| uhr          | 0              | COMMON_v2.11        | 24-07-02              | 0                         |
+| 271          | 01             | UhrShoteate_Version | 2.11+genkyo2.11       | U-PDS HR 諸手当申請システムバージョン   |
+| uhr_shote    | 0              | GENKYO_v2.11        | 24-07-02              | 0                         |
+| 262          | 01             | UhrNencho_Version   | 2.11.4+reigetsu2.11.4 | U-PDS HR 年末調整申請システムバージョン  |
+| uhr_nencho   | 0              | REIGETSU_v2.11.4    | 25-09-18              | 6                         |
+| 351          | 01             | UhrShinjo_Version   | 2.9                   | U-PDS HR 身上調書システムバージョン    |
+| uhr_shinjo   | 0              | INIT                | 22-05-02              | 1                         |
 
 
 #### データベース文字コード (NLS_CHARACTERSET)

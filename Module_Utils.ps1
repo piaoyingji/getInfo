@@ -73,7 +73,11 @@ Function Invoke-Menu {
 }
 
 Function Wait-AndClear {
-    Write-Host "`n$(T 'Opt_Back')..." -ForegroundColor Gray
+    if ($Global:ReportFile -and (Test-Path $Global:ReportFile)) {
+        $FullPath = (Get-Item $Global:ReportFile).FullName
+        Write-Host "`n[Report]: $FullPath" -ForegroundColor Cyan
+    }
+    Write-Host "$(T 'Opt_Back')..." -ForegroundColor Gray
     [void](Read-Host)
     Clear-Host
 }

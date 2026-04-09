@@ -16,13 +16,18 @@ Try {
     . (Join-Path $ScriptDir "Module_Tomcat.ps1")
     . (Join-Path $ScriptDir "Module_Oracle.ps1")
 
+    # Ensure results folder exists
+    $ResultDir = Join-Path $ScriptDir "result"
+    if (-not (Test-Path $ResultDir)) { New-Item -Path $ResultDir -ItemType Directory | Out-Null }
+
     # [UI: Cover]
     Clear-Host
     Write-MenuHeader (T "CoverTitle")
     Write-Host "Version: 4.1.0 (Encoding Optimized)" -ForegroundColor Gray
     Write-Host "`n$(T 'Msg_InputFile')" -NoNewline
     $InFilename = Read-Host
-    $Global:ReportFile = If ([string]::IsNullOrWhiteSpace($InFilename)) { "Investigation_Report.md" } Else { if ($InFilename -notlike "*.md") { $InFilename + ".md" } else { $InFilename } }
+    $BaseName = If ([string]::IsNullOrWhiteSpace($InFilename)) { "Investigation_Report.md" } Else { if ($InFilename -notlike "*.md") { $InFilename + ".md" } else { $InFilename } }
+    $Global:ReportFile = Join-Path $ResultDir $BaseName
 
     $StartTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     Set-Content -Path $Global:ReportFile -Value ("# Investigation Report`n`n- **Start Time**: $StartTime`n") -Encoding UTF8
@@ -79,7 +84,10 @@ Try {
                 $Selected = 4
             }
             5 { 
+                $FullPath = (Get-Item $Global:ReportFile).FullName
+                Write-Host "`n[Report Path]: $FullPath" -ForegroundColor Cyan
                 Write-Host "`n$(T 'Msg_Menu_Exit')" -ForegroundColor Gray
+                Start-Sleep -Seconds 2
                 return 
             }
         }
