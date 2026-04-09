@@ -1,6 +1,6 @@
 # Module_Oracle.ps1
-# Version: 4.3.5
-# Description: Oracle Investigation Module (v4.3.5 UHR Table & Alignment fix)
+# Version: 4.3.6
+# Description: Oracle Investigation Module (v4.3.6 Dynamic Schema fix)
 
 Function Investigate-Oracle {
     Param([Boolean]$Silent = $false)
@@ -8,10 +8,7 @@ Function Investigate-Oracle {
     $OraUser = ''
     $OraPass = ''
     $OraInst = ''
-    # Table and Filter updated as per user request
-    $TargetTable = 'UHR.CONF_SYSCONTROL'
-    $FilterSql = 'WHERE CS_CPROPERTYNAME LIKE ''%Version%'''
-
+    
     if (-not $Silent) {
         Write-MenuHeader (T 'Main_Oracle')
         Write-Host (T 'Ora_Header')
@@ -24,6 +21,12 @@ Function Investigate-Oracle {
         Write-Host (T 'Ora_Empty') -ForegroundColor Red
         return
     }
+
+    # Dynamic Schema Name based on input Username
+    # We strip "as sysdba" if present to get the base schema name
+    $SchemaName = $OraUser -replace '\s+as\s+sysdba\s*', ''
+    $TargetTable = $SchemaName + '.CONF_SYSCONTROL'
+    $FilterSql = 'WHERE CS_CPROPERTYNAME LIKE ''%Version%'''
 
     $MsgConnect = T 'Ora_Connect'
     Write-Host "`n$MsgConnect" -ForegroundColor Cyan
@@ -50,7 +53,6 @@ Function Investigate-Oracle {
         'SELECT NAME || ''|'' || VALUE FROM V$PARAMETER WHERE NAME IN (''sga_target'', ''pga_aggregate_target'', ''memory_target'');',
         'SELECT ''[MEM_END]'' FROM DUAL;',
         'SELECT ''[DATA_START]'' FROM DUAL;',
-        # Changed to specific columns with pipe for table alignment
         'SELECT CS_CPROPERTYNAME || ''|'' || CS_CPROPERTYVALUE FROM ' + $TargetTable + ' ' + $FilterSql + ';',
         'SELECT ''[DATA_END]'' FROM DUAL;',
         'EXIT;'
@@ -96,7 +98,6 @@ Function Investigate-Oracle {
         if ($Rows.Count -eq 0) { return (T 'Ora_Table_NoData') }
         
         $Grid = @()
-        # Add Header Row manually
         $Header = @($Head1, $Head2)
         if ($Head3) { $Header += $Head3 }
         $Grid += ,$Header
