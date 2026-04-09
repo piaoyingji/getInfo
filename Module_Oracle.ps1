@@ -1,6 +1,6 @@
 # Module_Oracle.ps1
-# Version: 4.3.7
-# Description: Oracle Investigation Module (v4.3.7 Table Order & Alignment fix)
+# Version: 4.3.8
+# Description: Oracle Investigation Module (v4.3.8 SELECT * Support)
 
 Function Investigate-Oracle {
     Param([Boolean]$Silent = $false)
@@ -30,11 +30,11 @@ Function Investigate-Oracle {
     Write-Host "`n$MsgConnect" -ForegroundColor Cyan
     
     $SqlLines = @(
-        'SET PAGESIZE 0',
+        'SET PAGESIZE 100',
         'SET FEEDBACK OFF',
         'SET VERIFY OFF',
         'SET HEADING OFF',
-        'SET LINESIZE 2000',
+        'SET LINESIZE 3000',
         'SET TRIMSPOOL ON',
         'COLUMN BANNER FORMAT A200',
         'COLUMN VAL FORMAT A200',
@@ -50,8 +50,13 @@ Function Investigate-Oracle {
         'SELECT ''[MEM_START]'' FROM DUAL;',
         'SELECT NAME || ''|'' || VALUE FROM V$PARAMETER WHERE NAME IN (''sga_target'', ''pga_aggregate_target'', ''memory_target'');',
         'SELECT ''[MEM_END]'' FROM DUAL;',
+        
+        # Use COLSEP for SELECT *
         'SELECT ''[DATA_START]'' FROM DUAL;',
-        'SELECT CS_CPROPERTYNAME || ''|'' || CS_CPROPERTYVALUE FROM ' + $TargetTable + ' ' + $FilterSql + ';',
+        'SET HEADING ON',
+        'SET COLSEP "|"',
+        'SELECT * FROM ' + $TargetTable + ' ' + $FilterSql + ';',
+        'SET HEADING OFF',
         'SELECT ''[DATA_END]'' FROM DUAL;',
         'EXIT;'
     )
@@ -90,21 +95,24 @@ Function Investigate-Oracle {
     $LoginInfo = $InfoList -join $NL
 
     Function Build-Table {
-        Param($Raw, $Head1 = 'Column 1', $Head2 = 'Column 2', $Head3 = $null)
+        Param($Raw, $DefaultHeader = $null)
         if ([string]::IsNullOrWhiteSpace($Raw)) { return (T 'Ora_Table_NoData') }
-        $Rows = $Raw -split "`n" | Where-Object { $_.Trim() -ne '' }
+        $Rows = $Raw -split "`n" | Where-Object { $_.Trim() -ne '' -and $_ -notmatch '^-+$' }
         if ($Rows.Count -eq 0) { return (T 'Ora_Table_NoData') }
         
         $Grid = @()
-        $Header = @($Head1, $Head2)
-        if ($Head3) { $Header += $Head3 }
-        $Grid += ,$Header
-
         foreach ($R in $Rows) { 
             $Cols = $R -split '\|' | ForEach-Object { $_.Trim() }
             $Grid += ,$Cols 
         }
-        
+
+        # If data has no natural header but we want one
+        if ($DefaultHeader -and $Grid.Count -gt 0 -and $Grid[0].Count -eq $DefaultHeader.Count) {
+             # Check if first row is already a header (heuristic: does it look like column names?)
+             # For simplicity, if DefaultHeader is passed, we INSERT it as the first row if the input was heading-off
+             # But here we use HEADING ON for DATA_START, so Grid[0] IS the header.
+        }
+
         $MaxW = @()
         $ColCount = $Grid[0].Count
         for ($c=0; $c -lt $ColCount; $c++) {
@@ -131,11 +139,13 @@ Function Investigate-Oracle {
         return $Res
     }
 
-    $DataTable = Build-Table -Raw $RawData -Head1 'PROPERTY_NAME' -Head2 'VALUE'
-    $DirTable = Build-Table -Raw $OraDir -Head1 'OWNER' -Head2 'NAME' -Head3 'PATH'
-    $MemTable = Build-Table -Raw $OraMem -Head1 'PARAMETER' -Head2 'VALUE'
+    # Manual headers for these since we use HEADING OFF + Manual Pipe concat in SQL
+    $DirTable = Build-Table -Raw ('OWNER|NAME|PATH' + $NL + $OraDir)
+    $MemTable = Build-Table -Raw ('PARAMETER|VALUE' + $NL + $OraMem)
+    
+    # Automatic header for this since we use HEADING ON + COLSEP in SQL
+    $DataTable = Build-Table -Raw $RawData
 
-    # REVISED ORDER: Login -> Version -> SYSTEM CONFIG -> Encoding -> Directories -> Memory
     $SummaryList = @()
     $SummaryList += (T 'Ora_Summary_Login')
     $SummaryList += $LoginInfo

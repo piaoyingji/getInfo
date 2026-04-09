@@ -1,6 +1,6 @@
 # Investigation Report
 
-- **Start Time**: 2026-04-09 16:22:53
+- **Start Time**: 2026-04-09 16:26:58
 
 
 ## Oracle Database
@@ -15,6 +15,14 @@
 
 #### Oracle DB バージョン
 > Oracle Database 19c Enterprise Edition Release 19.0.0.0.0 - Production
+
+#### システム設定表 (System.Object[])
+| PROPERTY_NAME              | VALUE |
+| :------------------------- | :---- |
+| S                          |       |
+| 1  SELECT CS_CPROPERTYNAME |       |
+| 2                          |       |
+
 
 #### データベース文字コード (NLS_CHARACTERSET)
 > JA16SJIS
@@ -49,13 +57,5 @@
 | sga_target           | 2147483648 |
 | memory_target        | 0          |
 | pga_aggregate_target | 1932525568 |
-
-
-#### システム設定表 (System.Object[])
-| PROPERTY_NAME              | VALUE |
-| :------------------------- | :---- |
-| S                          |       |
-| 1  SELECT CS_CPROPERTYNAME |       |
-| 2                          |       |
 
 
