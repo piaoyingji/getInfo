@@ -1,6 +1,6 @@
 # Module_Oracle.ps1
-# Version: 4.3.6
-# Description: Oracle Investigation Module (v4.3.6 Dynamic Schema fix)
+# Version: 4.3.7
+# Description: Oracle Investigation Module (v4.3.7 Table Order & Alignment fix)
 
 Function Investigate-Oracle {
     Param([Boolean]$Silent = $false)
@@ -22,8 +22,6 @@ Function Investigate-Oracle {
         return
     }
 
-    # Dynamic Schema Name based on input Username
-    # We strip "as sysdba" if present to get the base schema name
     $SchemaName = $OraUser -replace '\s+as\s+sysdba\s*', ''
     $TargetTable = $SchemaName + '.CONF_SYSCONTROL'
     $FilterSql = 'WHERE CS_CPROPERTYNAME LIKE ''%Version%'''
@@ -118,7 +116,7 @@ Function Investigate-Oracle {
         }
 
         $Res = '|'
-        for ($c=0; $c -lt $MaxW.Count; $c++) { $Res += ' ' + $Grid[0][$c].PadRight($MaxW[$c]) + ' |' }
+        for ($c=0; $c -lt $MaxW.Count; $c++) { $Res += ' ' + [string]($Grid[0][$c]).PadRight($MaxW[$c]) + ' |' }
         $Res += $NL + '|'
         for ($c=0; $c -lt $MaxW.Count; $c++) { $Res += ' :' + ('-' * ($MaxW[$c]-1)) + ' |' }
         $Res += $NL
@@ -126,23 +124,27 @@ Function Investigate-Oracle {
             $Res += '|'
             for ($c=0; $c -lt $MaxW.Count; $c++) { 
                 $Val = if ($c -lt $Grid[$r].Count) { $Grid[$r][$c] } else { '' }
-                $Res += ' ' + $Val.PadRight($MaxW[$c]) + ' |' 
+                $Res += ' ' + ([string]$Val).PadRight($MaxW[$c]) + ' |' 
             }
             $Res += $NL
         }
         return $Res
     }
 
+    $DataTable = Build-Table -Raw $RawData -Head1 'PROPERTY_NAME' -Head2 'VALUE'
     $DirTable = Build-Table -Raw $OraDir -Head1 'OWNER' -Head2 'NAME' -Head3 'PATH'
     $MemTable = Build-Table -Raw $OraMem -Head1 'PARAMETER' -Head2 'VALUE'
-    $DataTable = Build-Table -Raw $RawData -Head1 'PROPERTY_NAME' -Head2 'VALUE'
 
+    # REVISED ORDER: Login -> Version -> SYSTEM CONFIG -> Encoding -> Directories -> Memory
     $SummaryList = @()
     $SummaryList += (T 'Ora_Summary_Login')
     $SummaryList += $LoginInfo
     $SummaryList += ''
     $SummaryList += (T 'Ora_Summary_Ver')
     $SummaryList += ('> ' + $OraVer)
+    $SummaryList += ''
+    $SummaryList += (T 'Ora_Summary_Table' @($TargetTable))
+    $SummaryList += $DataTable
     $SummaryList += ''
     $SummaryList += (T 'Ora_Summary_Enc')
     $SummaryList += ('> ' + $OraEnc)
@@ -152,9 +154,6 @@ Function Investigate-Oracle {
     $SummaryList += ''
     $SummaryList += (T 'Ora_Summary_Mem')
     $SummaryList += $MemTable
-    $SummaryList += ''
-    $SummaryList += (T 'Ora_Summary_Table' @($TargetTable))
-    $SummaryList += $DataTable
 
     $FullDetail = $SummaryList -join $NL
 
