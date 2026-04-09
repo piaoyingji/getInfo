@@ -21,8 +21,8 @@
         "Msg_Result": "({0}) 件の {1} インスタンスが見つかりました",
         "Opt_Method_Proc": "サービスおよび実行中プロセスから探索 (推奨/高速)",
         "Opt_Method_Path": "特定のディレクトリ内を詳細スキャン (低速)",
-        "Msg_Input_Path": "スキャン対象の親ディレクトリを入力してください: ",
-        "Msg_Invalid_Path": "指定されたパスが見つかりません。探索を中止します。",
+        "Msg_Input_Path": "スキャン対象の親ディレクトリを入力してください",
+        "Msg_Invalid_Path": "指定されたパスが見つかりません",
         "Ora_Header": "--- Oracle ログイン ---",
         "Ora_User": "ユーザーID: ",
         "Ora_Pass": "パスワード: ",
@@ -34,7 +34,7 @@
         "SSL_On": "有効",
         "SSL_Off": "無効",
         "WebappsInfo": "Webアプリ数",
-        "Ora_Empty": "ユーザー名または接続先が空です。",
+        "Ora_Empty": "ユーザー名または接続先が空です",
         "Ora_Result_Title": "Oracle Database",
         "Ora_Short_Success": "取得完了",
         "Ora_Short_Error": "例外発生",
@@ -42,10 +42,10 @@
         "Ora_Summary_Ver": "#### Oracle DB バージョン",
         "Ora_Summary_Table": "#### システム設定表 ({0})",
         "Ora_Table_NoData": "該当データなし",
-        "Ora_Table_Error": "SQL実行エラーが発生しました。",
+        "Ora_Table_Error": "SQL実行エラーが発生しました",
         "Msg_Menu_Exit": "終了します...",
-        "Msg_Lang_JA_Only": "現在は日本語のみ対応しています。",
+        "Msg_Lang_JA_Only": "現在は日本語のみ対応しています",
         "Msg_Critical_Error": "[Critical Error]",
-        "Msg_Program_End": "プログラムが異常終了しました。Enterキーを押してください。"
+        "Msg_Program_End": "プログラムが異常終了しました"
     }
 }
