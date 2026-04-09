@@ -1,6 +1,6 @@
 # Module_Oracle.ps1
-# Version: 4.3.8
-# Description: Oracle Investigation Module (v4.3.8 SELECT * Support)
+# Version: 4.3.9
+# Description: Oracle Investigation Module (v4.3.9 Final SQL/Alignment logic)
 
 Function Investigate-Oracle {
     Param([Boolean]$Silent = $false)
@@ -22,22 +22,24 @@ Function Investigate-Oracle {
         return
     }
 
+    # Dynamic Schema Name
     $SchemaName = $OraUser -replace '\s+as\s+sysdba\s*', ''
     $TargetTable = $SchemaName + '.CONF_SYSCONTROL'
-    $FilterSql = 'WHERE CS_CPROPERTYNAME LIKE ''%Version%'''
+    # Exactly as requested: SELECT * FROM ... WHERE ...
+    $UserSql = 'SELECT * FROM ' + $TargetTable + ' WHERE CS_CPROPERTYNAME LIKE ''%Version%'';'
 
     $MsgConnect = T 'Ora_Connect'
     Write-Host "`n$MsgConnect" -ForegroundColor Cyan
     
     $SqlLines = @(
-        'SET PAGESIZE 100',
+        'SET PAGESIZE 0',
         'SET FEEDBACK OFF',
         'SET VERIFY OFF',
         'SET HEADING OFF',
-        'SET LINESIZE 3000',
+        'SET LINESIZE 5000',
         'SET TRIMSPOOL ON',
-        'COLUMN BANNER FORMAT A200',
-        'COLUMN VAL FORMAT A200',
+        'SET TERMOUT OFF',
+        'SET PAGESIZE 0',
         'SELECT ''[VER_START]'' FROM DUAL;',
         'SELECT BANNER FROM V$VERSION;',
         'SELECT ''[VER_END]'' FROM DUAL;',
@@ -51,11 +53,12 @@ Function Investigate-Oracle {
         'SELECT NAME || ''|'' || VALUE FROM V$PARAMETER WHERE NAME IN (''sga_target'', ''pga_aggregate_target'', ''memory_target'');',
         'SELECT ''[MEM_END]'' FROM DUAL;',
         
-        # Use COLSEP for SELECT *
         'SELECT ''[DATA_START]'' FROM DUAL;',
         'SET HEADING ON',
         'SET COLSEP "|"',
-        'SELECT * FROM ' + $TargetTable + ' ' + $FilterSql + ';',
+        'SET PAGESIZE 1000',
+        'SET NUMWIDTH 20',
+        $UserSql,
         'SET HEADING OFF',
         'SELECT ''[DATA_END]'' FROM DUAL;',
         'EXIT;'
@@ -63,6 +66,7 @@ Function Investigate-Oracle {
     $SqlText = $SqlLines -join "`n"
 
     $ConnectStr = $OraUser + '/' + $OraPass + '@' + $OraInst
+    # Run with -S (Silent) but we need the output
     $Output = $SqlText | sqlplus.exe -S $ConnectStr 2>&1
     $OutputStr = $Output | Out-String
 
@@ -95,23 +99,27 @@ Function Investigate-Oracle {
     $LoginInfo = $InfoList -join $NL
 
     Function Build-Table {
-        Param($Raw, $DefaultHeader = $null)
+        Param($Raw, $IsManualHeader = $false, $Head1 = '', $Head2 = '', $Head3 = '')
         if ([string]::IsNullOrWhiteSpace($Raw)) { return (T 'Ora_Table_NoData') }
-        $Rows = $Raw -split "`n" | Where-Object { $_.Trim() -ne '' -and $_ -notmatch '^-+$' }
+        
+        # Remove empty lines and sqlplus dashed lines (e.g. ---------)
+        $Rows = $Raw -split "`n" | Where-Object { $_.Trim() -ne '' -and $_ -notmatch '^\s*[-| ]+\s*$' }
         if ($Rows.Count -eq 0) { return (T 'Ora_Table_NoData') }
         
         $Grid = @()
-        foreach ($R in $Rows) { 
-            $Cols = $R -split '\|' | ForEach-Object { $_.Trim() }
-            $Grid += ,$Cols 
+        if ($IsManualHeader) {
+            $H = @($Head1, $Head2)
+            if ($Head3) { $H += $Head3 }
+            $Grid += ,$H
         }
 
-        # If data has no natural header but we want one
-        if ($DefaultHeader -and $Grid.Count -gt 0 -and $Grid[0].Count -eq $DefaultHeader.Count) {
-             # Check if first row is already a header (heuristic: does it look like column names?)
-             # For simplicity, if DefaultHeader is passed, we INSERT it as the first row if the input was heading-off
-             # But here we use HEADING ON for DATA_START, so Grid[0] IS the header.
+        foreach ($R in $Rows) { 
+            # Split by | and trim each column
+            $Cols = $R -split '\|' | ForEach-Object { ([string]$_).Trim() }
+            $Grid += ,$Cols 
         }
+        
+        if ($Grid.Count -eq 0) { return (T 'Ora_Table_NoData') }
 
         $MaxW = @()
         $ColCount = $Grid[0].Count
@@ -146,12 +154,12 @@ Function Investigate-Oracle {
         return $Res
     }
 
-    # Manual headers for these since we use HEADING OFF + Manual Pipe concat in SQL
-    $DirTable = Build-Table -Raw ('OWNER|NAME|PATH' + $NL + $OraDir)
-    $MemTable = Build-Table -Raw ('PARAMETER|VALUE' + $NL + $OraMem)
+    # Manual pipe concat used in SQL for these
+    $DirTable = Build-Table -Raw $OraDir -IsManualHeader $true -Head1 'OWNER' -Head2 'NAME' -Head3 'PATH'
+    $MemTable = Build-Table -Raw $OraMem -IsManualHeader $true -Head1 'PARAMETER' -Head2 'VALUE'
     
-    # Automatic header for this since we use HEADING ON + COLSEP in SQL
-    $DataTable = Build-Table -Raw $RawData
+    # HEADING ON + COLSEP used in SQL for this (already has header in Rows[0])
+    $DataTable = Build-Table -Raw $RawData -IsManualHeader $false
 
     $SummaryList = @()
     $SummaryList += (T 'Ora_Summary_Login')
