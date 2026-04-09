@@ -52,17 +52,17 @@ Try {
             }
             1 { 
                 Write-MenuHeader (T "InvestTitle" @("Apache"))
-                Investigate-Apache -Silent $true
+                Investigate-Apache
                 Wait-AndClear 
             }
             2 { 
                 Write-MenuHeader (T "InvestTitle" @("Tomcat"))
-                Investigate-Tomcat -Silent $true
+                Investigate-Tomcat
                 Wait-AndClear 
             }
             3 { 
                 Write-MenuHeader (T "InvestTitle" @("Oracle"))
-                Investigate-Oracle -Silent $true
+                Investigate-Oracle
                 Wait-AndClear 
             }
             4 { 
