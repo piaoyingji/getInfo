@@ -132,16 +132,14 @@ Function Investigate-Oracle {
 
         # Build final markdown using concatenation to avoid backtick/interpolation confusion
         $Line_Break = "`n"
-        $Section1 = (T 'Ora_Summary_Sql') + $Line_Break
-        $Section1 += '```sql' + "`r`n" + $SqlText + "`r`n" + '```' + $Line_Break + $Line_Break
-        
+        # Markdown assembly (Version and Table only)
         $Section2 = (T 'Ora_Summary_Ver') + $Line_Break
         $Section2 += '> ' + $OraVer + $Line_Break + $Line_Break
         
         $TableTitle = (T 'Ora_Summary_Table' $TargetTable)
         $Section3 = $TableTitle + $Line_Break + $MDTable
 
-        $FinalMD = $Section1 + $Section2 + $Section3
+        $FinalMD = $Section2 + $Section3
 
         Log-Info -Title (T 'Ora_Result_Title') -ShortResult (T 'Ora_Short_Success') -FullDetail $FinalMD
 
