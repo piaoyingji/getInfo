@@ -1,153 +1,157 @@
 # Module_Oracle.ps1
-# Version: 4.1.0
-# Description: Oracle Investigation Module (v4.2.0 Stable fix)
+# Version: 4.3.4
+# Description: Oracle Investigation Module (v4.3.4 Single-Quote fix)
 
 Function Investigate-Oracle {
     Param([Boolean]$Silent = $false)
     
-    $OriginalEncoding = [Console]::OutputEncoding
-    Try {
-        [Console]::OutputEncoding = [System.Text.Encoding]::GetEncoding(932)
-    } Catch {}
+    $OraUser = ''
+    $OraPass = ''
+    $OraInst = ''
+    $TargetTable = 'USER.CONF_SYSCONTROL'
 
-    Write-Host ("`n" + (T 'Ora_Header')) -ForegroundColor Cyan
-    Write-Host (T 'Ora_User') -NoNewline; $User = Read-Host
-    Write-Host (T 'Ora_Pass') -NoNewline; $Pass = Read-Host -AsSecureString
-    Write-Host (T 'Ora_Inst') -NoNewline; $Instance = Read-Host
-    
-    If ([string]::IsNullOrWhiteSpace($User) -or [string]::IsNullOrWhiteSpace($Instance)) {
-        Write-Host (T 'Ora_Empty') -ForegroundColor Yellow
+    if (-not $Silent) {
+        Write-MenuHeader (T 'Main_Oracle')
+        Write-Host (T 'Ora_Header')
+        $OraUser = Read-Host (T 'Ora_User')
+        $OraPass = Read-Host (T 'Ora_Pass')
+        $OraInst = Read-Host (T 'Ora_Inst')
+    }
+
+    if ([string]::IsNullOrWhiteSpace($OraUser) -or [string]::IsNullOrWhiteSpace($OraInst)) {
+        Write-Host (T 'Ora_Empty') -ForegroundColor Red
         return
     }
 
-    $BSTR = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($Pass)
-    $UnsecurePass = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($BSTR)
-
-    $TmpSql = Join-Path $env:TEMP 'invest_ora.sql'
+    $MsgConnect = T 'Ora_Connect'
+    Write-Host "`n$MsgConnect" -ForegroundColor Cyan
     
-    Write-Host ("`n" + (T 'Ora_Connect')) -ForegroundColor Gray
-
-    $TargetTable = "${User}.CONF_SYSCONTROL"
-    
-    # Define SQL using an array of strings to avoid heredoc issues during development
     $SqlLines = @(
-        'SET PAGESIZE 1000',
+        'SET PAGESIZE 0',
         'SET FEEDBACK OFF',
-        'SET HEADING ON',
-        'SET LINESIZE 1000',
-        'SET TERMOUT ON',
-        'SET ECHO OFF',
         'SET VERIFY OFF',
+        'SET HEADING OFF',
+        'SET LINESIZE 2000',
         'SET TRIMSPOOL ON',
-        "SET COLSEP ' | '",
-        'SET UNDERLINE OFF',
-        '',
-        'PROMPT [VERSION_START]',
+        'COLUMN BANNER FORMAT A200',
+        'COLUMN VAL FORMAT A200',
+        'SELECT ''[VER_START]'' FROM DUAL;',
         'SELECT BANNER FROM V$VERSION;',
-        'PROMPT [VERSION_END]',
-        '',
-        'PROMPT [DATA_START]',
-        'COLUMN PROPERTY_NAME FORMAT A30',
-        'COLUMN VALUE         FORMAT A30',
-        'COLUMN DESCRIPTION   FORMAT A60',
-        '',
-        'SELECT ',
-        '    CS_CPROPERTYNAME  AS PROPERTY_NAME, ',
-        '    CS_CPROPERTYVALUE AS VALUE, ',
-        '    CS_CPROPERTYDESC  AS DESCRIPTION',
-        "FROM $TargetTable ",
-        "WHERE CS_CPROPERTYNAME LIKE '%Version%';",
-        'PROMPT [DATA_END]',
+        'SELECT ''[VER_END]'' FROM DUAL;',
+        'SELECT ''[CHAR_START]'' FROM DUAL;',
+        'SELECT VALUE FROM NLS_DATABASE_PARAMETERS WHERE PARAMETER = ''NLS_CHARACTERSET'';',
+        'SELECT ''[CHAR_END]'' FROM DUAL;',
+        'SELECT ''[DIR_START]'' FROM DUAL;',
+        'SELECT OWNER || ''|'' || DIRECTORY_NAME || ''|'' || DIRECTORY_PATH FROM ALL_DIRECTORIES;',
+        'SELECT ''[DIR_END]'' FROM DUAL;',
+        'SELECT ''[MEM_START]'' FROM DUAL;',
+        'SELECT NAME || ''|'' || VALUE FROM V$PARAMETER WHERE NAME IN (''sga_target'', ''pga_aggregate_target'', ''memory_target'');',
+        'SELECT ''[MEM_END]'' FROM DUAL;',
+        'SELECT ''[DATA_START]'' FROM DUAL;',
+        'SELECT * FROM ' + $TargetTable + ';',
+        'SELECT ''[DATA_END]'' FROM DUAL;',
         'EXIT;'
     )
-    $SqlText = $SqlLines -join "`r`n"
-    $SqlText | Set-Content -Path $TmpSql -Encoding ASCII
+    $SqlText = $SqlLines -join "`n"
 
-    Try {
-        $ConnectStr = "${User}/${UnsecurePass}@${Instance}"
-        # Quote the connection string for sqlplus
-        $RawOutput = sqlplus -S "$ConnectStr" "@$TmpSql"
-        $OutputStr = $RawOutput -join "`r`n"
+    $ConnectStr = $OraUser + '/' + $OraPass + '@' + $OraInst
+    $Output = $SqlText | sqlplus.exe -S $ConnectStr 2>&1
+    $OutputStr = $Output | Out-String
 
-        $OraVer = 'FAIL'
-        If ($OutputStr -match '(?s)\[VERSION_START\]\s*(.*?)\s*\[VERSION_END\]') {
-            $OraVer = $Matches[1].Trim()
-        }
-
-        $MDTable = ""
-        If ($OutputStr -match '(?s)\[DATA_START\]\s*(.*?)\s*\[DATA_END\]') {
-            $DataBlock = $Matches[1].Trim()
-            $Lines = $DataBlock -split "\r?\n" | Where-Object { $_.Trim() -ne "" }
-            
-            If ($Lines.Count -ge 1) {
-                # Calculate widths and align
-                $DataRows = @()
-                $MaxColumnWidths = @(0, 0, 0)
-                
-                foreach ($Line in $Lines) {
-                    $Cells = $Line -split ' \| ' | ForEach-Object { $_.Trim() }
-                    $DataRows += ,$Cells
-                    for ($i = 0; $i -lt $Cells.Count -and $i -lt 3; $i++) {
-                        if ($Cells[$i].Length -gt $MaxColumnWidths[$i]) {
-                            $MaxColumnWidths[$i] = $Cells[$i].Length
-                        }
-                    }
-                }
-
-                for ($i = 0; $i -lt 3; $i++) {
-                    if ($MaxColumnWidths[$i] -lt 3) { $MaxColumnWidths[$i] = 3 }
-                }
-                
-                # Header
-                $Header = '| '
-                $Sep = '| '
-                for ($i = 0; $i -lt 3; $i++) {
-                    $Val = if ($i -lt $DataRows[0].Count) { $DataRows[0][$i] } else { '' }
-                    $Header += $Val.PadRight($MaxColumnWidths[$i]) + ' | '
-                    $Sep += (':' + ('-' * ($MaxColumnWidths[$i] - 1))) + ' | '
-                }
-                $MDTable += $Header.TrimEnd() + "`r`n"
-                $MDTable += $Sep.TrimEnd() + "`r`n"
-                
-                # Rows
-                for ($r = 1; $r -lt $DataRows.Count; $r++) {
-                    $RowStr = '| '
-                    for ($c = 0; $c -lt 3; $c++) {
-                        $Val = if ($c -lt $DataRows[$r].Count) { $DataRows[$r][$c] } else { '' }
-                        $RowStr += $Val.PadRight($MaxColumnWidths[$c]) + ' | '
-                    }
-                    $MDTable += $RowStr.TrimEnd() + "`r`n"
-                }
-            }
-        }
-
-        If ([string]::IsNullOrWhiteSpace($MDTable)) { 
-            If ($OutputStr -match 'ORA-\d+') {
-                $ErrHead = '> [!CAUTION]' + "`r`n> " + (T 'Ora_Table_Error') + "`r`n`r`n"
-                $MDTable = $ErrHead + '```' + "`r`n$($OutputStr.Trim())`r`n" + '```'
-            } Else {
-                $MDTable = T 'Ora_Table_NoData'
-            }
-        }
-
-        # Build final markdown using concatenation to avoid backtick/interpolation confusion
-        $Line_Break = "`n"
-        # Markdown assembly (Version and Table only)
-        $Section2 = (T 'Ora_Summary_Ver') + $Line_Break
-        $Section2 += '> ' + $OraVer + $Line_Break + $Line_Break
-        
-        $TableTitle = (T 'Ora_Summary_Table' $TargetTable)
-        $Section3 = $TableTitle + $Line_Break + $MDTable
-
-        $FinalMD = $Section2 + $Section3
-
-        Log-Info -Title (T 'Ora_Result_Title') -ShortResult (T 'Ora_Short_Success') -FullDetail $FinalMD
-
-    } Catch {
-        $ErrorMsg = if ($_.Exception) { $_.Exception.Message } else { $_.ToString() }
-        Log-Info -Title (T 'Ora_Result_Title') -ShortResult (T 'Ora_Short_Error') -FullDetail ('Msg: ' + $ErrorMsg)
-    } Finally {
-        If (Test-Path $TmpSql) { Remove-Item $TmpSql }
-        [Console]::OutputEncoding = $OriginalEncoding
+    if ($OutputStr -match 'ORA-') {
+        $ErrTitle = T 'Ora_Result_Title'
+        $ErrRes = T 'Ora_Short_Error'
+        Log-Info -Title $ErrTitle -ShortResult $ErrRes -FullDetail ('> [!CAUTION]' + "`n" + '> SQL Error: ' + $OutputStr)
+        return
     }
+
+    Function Get-Section {
+        Param($In, $StartPattern, $EndPattern)
+        if ($In -match ('(?s)' + $StartPattern + '\s*(.*?)\s*' + $EndPattern)) { return $Matches[1].Trim() }
+        return ''
+    }
+
+    $OraVer = Get-Section $OutputStr '\[VER_START\]' '\[VER_END\]'
+    $OraEnc = Get-Section $OutputStr '\[CHAR_START\]' '\[CHAR_END\]'
+    $OraDir = Get-Section $OutputStr '\[DIR_START\]' '\[DIR_END\]'
+    $OraMem = Get-Section $OutputStr '\[MEM_START\]' '\[MEM_END\]'
+    $RawData = Get-Section $OutputStr '\[DATA_START\]' '\[DATA_END\]'
+
+    $NL = [char]10
+    $InfoList = @()
+    $InfoList += '| Item | Value |'
+    $InfoList += '| :--- | :--- |'
+    $InfoList += ('| User | {0} |' -f $OraUser)
+    $InfoList += ('| Password | {0} |' -f $OraPass)
+    $InfoList += ('| SID/Service | {0} |' -f $OraInst)
+    $LoginInfo = $InfoList -join $NL
+
+    Function Build-Table {
+        Param($Raw)
+        if ([string]::IsNullOrWhiteSpace($Raw)) { return (T 'Ora_Table_NoData') }
+        $Rows = $Raw -split "`n" | Where-Object { $_.Trim() -ne '' }
+        if ($Rows.Count -eq 0) { return (T 'Ora_Table_NoData') }
+        
+        $Grid = @()
+        foreach ($R in $Rows) { 
+            $Cols = $R -split '\|' | ForEach-Object { $_.Trim() }
+            $Grid += ,$Cols 
+        }
+        
+        $MaxW = @()
+        for ($c=0; $c -lt $Grid[0].Count; $c++) {
+            $Width = 5 
+            foreach ($row in $Grid) { 
+                if ($c -lt $row.Count -and $row[$c].Length -gt $Width) { $Width = $row[$c].Length } 
+            }
+            $MaxW += $Width
+        }
+
+        $Res = '|'
+        for ($c=0; $c -lt $MaxW.Count; $c++) { $Res += ' ' + $Grid[0][$c].PadRight($MaxW[$c]) + ' |' }
+        $Res += $NL + '|'
+        for ($c=0; $c -lt $MaxW.Count; $c++) { $Res += ' :' + ('-' * ($MaxW[$c]-1)) + ' |' }
+        $Res += $NL
+        for ($r=1; $r -lt $Grid.Count; $r++) {
+            $Res += '|'
+            for ($c=0; $c -lt $MaxW.Count; $c++) { 
+                $Val = if ($c -lt $Grid[$r].Count) { $Grid[$r][$c] } else { '' }
+                $Res += ' ' + $Val.PadRight($MaxW[$c]) + ' |' 
+            }
+            $Res += $NL
+        }
+        return $Res
+    }
+
+    $DirTable = Build-Table $OraDir
+    $MemTable = Build-Table $OraMem
+    
+    $DataTable = (T 'Ora_Table_NoData')
+    if ($RawData) { $DataTable = '```text' + $NL + $RawData + $NL + '```' }
+
+    $SummaryList = @()
+    $SummaryList += (T 'Ora_Summary_Login')
+    $SummaryList += $LoginInfo
+    $SummaryList += ''
+    $SummaryList += (T 'Ora_Summary_Ver')
+    $SummaryList += ('> ' + $OraVer)
+    $SummaryList += ''
+    $SummaryList += (T 'Ora_Summary_Enc')
+    $SummaryList += ('> ' + $OraEnc)
+    $SummaryList += ''
+    $SummaryList += (T 'Ora_Summary_Dir')
+    $SummaryList += $DirTable
+    $SummaryList += ''
+    $SummaryList += (T 'Ora_Summary_Mem')
+    $SummaryList += $MemTable
+    $SummaryList += ''
+    $SummaryList += (T 'Ora_Summary_Table' @($TargetTable))
+    $SummaryList += $DataTable
+
+    $FullDetail = $SummaryList -join $NL
+
+    $OraTitle = T 'Ora_Result_Title'
+    $OraSuccess = T 'Ora_Short_Success'
+    Log-Info -Title $OraTitle -ShortResult $OraSuccess -FullDetail $FullDetail
+    Write-Host "$OraSuccess" -ForegroundColor Green
 }
