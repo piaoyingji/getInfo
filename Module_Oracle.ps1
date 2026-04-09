@@ -127,9 +127,13 @@ Function Investigate-Oracle {
         }
 
         $Res = '|'
-        for ($c=0; $c -lt $MaxW.Count; $c++) { $Res += ' ' + [string]($Grid[0][$c]).PadRight($MaxW[$c]) + ' |' }
+        for ($c=0; $c -lt $MaxW.Count; $c++) { 
+            $Res += ' ' + ([string]$Grid[0][$c]).PadRight($MaxW[$c]) + ' |' 
+        }
         $Res += $NL + '|'
-        for ($c=0; $c -lt $MaxW.Count; $c++) { $Res += ' :' + ('-' * ($MaxW[$c]-1)) + ' |' }
+        for ($c=0; $c -lt $MaxW.Count; $c++) { 
+            $Res += ' :' + ('-' * ($MaxW[$c]-1)) + ' |' 
+        }
         $Res += $NL
         for ($r=1; $r -lt $Grid.Count; $r++) {
             $Res += '|'
