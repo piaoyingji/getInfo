@@ -1,6 +1,6 @@
 # Module_Oracle.ps1
-# Version: 4.3.4
-# Description: Oracle Investigation Module (v4.3.4 Single-Quote fix)
+# Version: 4.3.5
+# Description: Oracle Investigation Module (v4.3.5 UHR Table & Alignment fix)
 
 Function Investigate-Oracle {
     Param([Boolean]$Silent = $false)
@@ -8,7 +8,9 @@ Function Investigate-Oracle {
     $OraUser = ''
     $OraPass = ''
     $OraInst = ''
-    $TargetTable = 'USER.CONF_SYSCONTROL'
+    # Table and Filter updated as per user request
+    $TargetTable = 'UHR.CONF_SYSCONTROL'
+    $FilterSql = 'WHERE CS_CPROPERTYNAME LIKE ''%Version%'''
 
     if (-not $Silent) {
         Write-MenuHeader (T 'Main_Oracle')
@@ -48,7 +50,8 @@ Function Investigate-Oracle {
         'SELECT NAME || ''|'' || VALUE FROM V$PARAMETER WHERE NAME IN (''sga_target'', ''pga_aggregate_target'', ''memory_target'');',
         'SELECT ''[MEM_END]'' FROM DUAL;',
         'SELECT ''[DATA_START]'' FROM DUAL;',
-        'SELECT * FROM ' + $TargetTable + ';',
+        # Changed to specific columns with pipe for table alignment
+        'SELECT CS_CPROPERTYNAME || ''|'' || CS_CPROPERTYVALUE FROM ' + $TargetTable + ' ' + $FilterSql + ';',
         'SELECT ''[DATA_END]'' FROM DUAL;',
         'EXIT;'
     )
@@ -87,19 +90,25 @@ Function Investigate-Oracle {
     $LoginInfo = $InfoList -join $NL
 
     Function Build-Table {
-        Param($Raw)
+        Param($Raw, $Head1 = 'Column 1', $Head2 = 'Column 2', $Head3 = $null)
         if ([string]::IsNullOrWhiteSpace($Raw)) { return (T 'Ora_Table_NoData') }
         $Rows = $Raw -split "`n" | Where-Object { $_.Trim() -ne '' }
         if ($Rows.Count -eq 0) { return (T 'Ora_Table_NoData') }
         
         $Grid = @()
+        # Add Header Row manually
+        $Header = @($Head1, $Head2)
+        if ($Head3) { $Header += $Head3 }
+        $Grid += ,$Header
+
         foreach ($R in $Rows) { 
             $Cols = $R -split '\|' | ForEach-Object { $_.Trim() }
             $Grid += ,$Cols 
         }
         
         $MaxW = @()
-        for ($c=0; $c -lt $Grid[0].Count; $c++) {
+        $ColCount = $Grid[0].Count
+        for ($c=0; $c -lt $ColCount; $c++) {
             $Width = 5 
             foreach ($row in $Grid) { 
                 if ($c -lt $row.Count -and $row[$c].Length -gt $Width) { $Width = $row[$c].Length } 
@@ -123,11 +132,9 @@ Function Investigate-Oracle {
         return $Res
     }
 
-    $DirTable = Build-Table $OraDir
-    $MemTable = Build-Table $OraMem
-    
-    $DataTable = (T 'Ora_Table_NoData')
-    if ($RawData) { $DataTable = '```text' + $NL + $RawData + $NL + '```' }
+    $DirTable = Build-Table -Raw $OraDir -Head1 'OWNER' -Head2 'NAME' -Head3 'PATH'
+    $MemTable = Build-Table -Raw $OraMem -Head1 'PARAMETER' -Head2 'VALUE'
+    $DataTable = Build-Table -Raw $RawData -Head1 'PROPERTY_NAME' -Head2 'VALUE'
 
     $SummaryList = @()
     $SummaryList += (T 'Ora_Summary_Login')
