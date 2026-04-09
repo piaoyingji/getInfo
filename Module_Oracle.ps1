@@ -118,7 +118,10 @@ Function Investigate-Oracle {
         for ($c=0; $c -lt $ColCount; $c++) {
             $Width = 5 
             foreach ($row in $Grid) { 
-                if ($c -lt $row.Count -and $row[$c].Length -gt $Width) { $Width = $row[$c].Length } 
+                if ($c -lt $row.Count) {
+                    $valStr = [string]($row[$c])
+                    if ($valStr.Length -gt $Width) { $Width = $valStr.Length }
+                }
             }
             $MaxW += $Width
         }
