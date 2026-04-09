@@ -1,5 +1,5 @@
 # Module_Apache.ps1
-# Version: 4.0.1
+# Version: 4.1.0
 # Description: Apache Investigation Module (v4.0.1 Speed Optimized)
 
 Function Investigate-Apache {

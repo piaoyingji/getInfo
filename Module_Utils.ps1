@@ -1,5 +1,5 @@
 # Module_Utils.ps1
-# Version: 4.5.0
+# Version: 4.1.0
 # Description: Global Utilities (v4.5.0 Robust Interactive Menu version)
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition -ErrorAction SilentlyContinue

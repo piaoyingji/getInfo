@@ -1,5 +1,5 @@
 # Module_Tomcat.ps1
-# Version: 4.0.1
+# Version: 4.1.0
 # Description: Tomcat Investigation Module (v4.0.1 Speed Optimized)
 
 Function Investigate-Tomcat {

@@ -1,5 +1,5 @@
 # Module_Oracle.ps1
-# Version: 4.2.0
+# Version: 4.1.0
 # Description: Oracle Investigation Module (v4.2.0 Stable fix)
 
 Function Investigate-Oracle {
