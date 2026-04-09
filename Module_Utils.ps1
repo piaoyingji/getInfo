@@ -1,109 +1,101 @@
 # Module_Utils.ps1
-# Version: 4.0.0
-# Description: 共通ユーティリティ (v4.0.0 Markdown レポート対応版)
+# Version: 4.5.0
+# Description: Global Utilities (v4.5.0 Robust Interactive Menu version)
 
-$Global:ReportFile = "Investigation_Report.md"
-$Global:I18n = @{
-    "ja-JP" = @{
-        "MenuHeader"       = "サーバー一括調査ツール"
-        "CoverTitle"       = "初期設定画面"
-        "MainTitle"        = "メインメニュー"
-        "SubTitle"         = "設定メニュー"
-        "InvestTotalTitle" = "全量一括調査"
-        "InvestTitle"      = "{0} 調査画面"
-        "Opt_All"          = "全量調査 (Apache, Tomcat, Oracle)"
-        "Opt_Apache"       = "Apache 調査"
-        "Opt_Tomcat"       = "Tomcat 調査"
-        "Opt_Oracle"       = "Oracle 調査"
-        "Opt_Settings"     = "設定 / 子メニュー"
-        "Opt_Exit"         = "終了"
-        "Opt_Lang"         = "言語設定 (日本語固定)"
-        "Opt_Back"         = "メインメニューに戻る"
-        "ProcSearch"       = "実行中プロセスの検索中..."
-        "SvcSearch"        = "レジストリ・サービス情報の検索中..."
-        "PathSearch"       = "ディスク探索 (最終手段) 開始..."
-        "Msg_Wait"         = "Enterキーを押してメニューに戻る..."
-        "Msg_InputFile"    = "【入力】レポート名 (デフォルト: Investigation_Report.md): "
-        "Msg_Start"        = "調査開始時間"
-        "Msg_Result"       = "[発見] {1} が {0} 件見つかりました。"
-        "Msg_None"         = "該当なし"
-        "Ora_Header"       = "--- Oracle ログイン ---"
-        "Ora_User"         = "ユーザー名         : "
-        "Ora_Pass"         = "パスワード         : "
-        "Ora_Inst"         = "接続先/SID        : "
-        "Ora_Connect"      = "[Action] 接続中..."
-        "SSL_On"           = "有効"
-        "SSL_Off"          = "無効"
-        "WebappsInfo"      = "Webアプリ数"
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition -ErrorAction SilentlyContinue
+if (-not $ScriptDir) { $ScriptDir = Get-Location }
+$JsonPath = Join-Path $ScriptDir "I18n.json"
+
+if (Test-Path $JsonPath) {
+    try {
+        $RawJson = Get-Content -Path $JsonPath -Raw -Encoding UTF8
+        $Global:I18nMap = $RawJson | ConvertFrom-Json
+    } catch {
+        $Global:I18nMap = $null
     }
 }
 
 Function T {
-    Param([String]$Key, [Object[]]$Args)
-    $Val = $Global:I18n["ja-JP"][$Key]
-    If ($null -eq $Val) { return $Key }
-    If ($Args) { return $Val -f $Args } 
+    Param([String]$Key)
+    if (-not $Global:I18nMap) { return $Key }
+    $Val = $Global:I18nMap."ja-JP".$Key
+    if ($null -eq $Val) { $Val = $Key }
+    if ($args -and $args.Count -gt 0) {
+        try { return $Val -f $args } catch { return $Val }
+    }
     return $Val
 }
 
+# Robust Interactive Arrow-Key Menu
 Function Invoke-Menu {
     Param(
         [String]$Title,
-        [String[]]$Options,
+        [Array]$Options,
         [Int]$Default = 0
     )
-    $Selected = $Default
-    While ($Host.UI.RawUI.KeyAvailable) { $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown") }
+    $Current = $Default
+    $RawUI = $Host.UI.RawUI
+    $OldCursorSize = $RawUI.CursorSize
+    try { $RawUI.CursorSize = 0 } catch {}
 
-    While ($true) {
+    while ($true) {
         Clear-Host
-        Write-MenuHeader $Title
-        Write-Host " [↑/↓] キーで移動、[Enter] で決定" -ForegroundColor Gray
-        Write-Host ""
-        For ($i=0; $i -lt $Options.Count; $i++) {
-            If ($i -eq $Selected) {
-                Write-Host "  >> $($Options[$i])" -ForegroundColor Cyan -BackgroundColor DarkBlue
-            } Else {
-                Write-Host "     $($Options[$i])" -ForegroundColor White
+        Write-Host "`n****************************************" -ForegroundColor DarkCyan
+        Write-Host "* $Title" -ForegroundColor DarkCyan
+        Write-Host "****************************************" -ForegroundColor DarkCyan
+        Write-Host " (Arrows: Move, Enter: Select, Q: Back/Exit)`n" -ForegroundColor Gray
+
+        for ($i=0; $i -lt $Options.Count; $i++) {
+            if ($i -eq $Current) {
+                Write-Host (" > {0} " -f $Options[$i]) -ForegroundColor Black -BackgroundColor White
+            } else {
+                Write-Host ("   {0} " -f $Options[$i])
             }
         }
-        $KeyInfo = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
-        $KeyCode = $KeyInfo.VirtualKeyCode
-        If ($KeyCode -eq 38) { $Selected--; If ($Selected -lt 0) { $Selected = $Options.Count - 1 } }
-        ElseIf ($KeyCode -eq 40) { $Selected++; If ($Selected -ge $Options.Count) { $Selected = 0 } }
-        ElseIf ($KeyCode -eq 13) { return $Selected }
+
+        $Key = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
+        if ($Key.VirtualKeyCode -eq 38) { # Up
+            $Current = if ($Current -gt 0) { $Current - 1 } else { $Options.Count - 1 }
+        } elseif ($Key.VirtualKeyCode -eq 40) { # Down
+            $Current = if ($Current -lt $Options.Count - 1) { $Current + 1 } else { 0 }
+        } elseif ($Key.VirtualKeyCode -eq 13) { # Enter
+            break
+        } elseif ($Key.Character -eq 'q' -or $Key.Character -eq 'Q') {
+            # Map Q to the last option (usually Exit or Back)
+            $Current = $Options.Count - 1
+            break
+        }
     }
+    
+    try { $RawUI.CursorSize = $OldCursorSize } catch {}
+    Clear-Host
+    return $Current
+}
+
+Function Wait-AndClear {
+    Write-Host "`n$(T 'Opt_Back')..." -ForegroundColor Gray
+    [void](Read-Host)
+    Clear-Host
 }
 
 Function Write-MenuHeader {
-    Param([String]$SubTitle)
-    $Line = "=" * 70
-    Write-Host $Line -ForegroundColor Cyan
-    Write-Host "   $(T 'MenuHeader') - $SubTitle" -ForegroundColor White
-    Write-Host $Line -ForegroundColor Cyan
+    Param([String]$Title)
+    Write-Host "`n****************************************" -ForegroundColor DarkCyan
+    Write-Host "* $Title" -ForegroundColor DarkCyan
+    Write-Host "****************************************" -ForegroundColor DarkCyan
 }
 
 Function Log-Info {
     Param([String]$Title, [String]$ShortResult, [String]$FullDetail)
-    Write-Host ("[RESULT] " + $Title + ": " + $ShortResult) -ForegroundColor Green
-    
-    # Markdown 形式での構築
     $Content = "`n## $Title`n"
     $Content += "- **結果概略**: $ShortResult`n"
-    If ($FullDetail) {
+    if ($FullDetail) {
         $Content += "### 詳細情報`n"
         $Content += "$FullDetail`n"
     }
-    $Content += "---`n"
-    
-    If (-not [string]::IsNullOrWhiteSpace($FullDetail) -or -not [string]::IsNullOrWhiteSpace($ShortResult)) {
+    if ($Global:ReportFile) {
         Add-Content -Path $Global:ReportFile -Value $Content -Encoding UTF8
+    } else {
+        Write-Host "`n$Content"
     }
 }
-
-Function Wait-AndClear {
-    Write-Host "`n$(T 'Msg_Wait')" -ForegroundColor Yellow
-    [void](Read-Host)
-}
-
-Write-Host "[INIT] Module_Utils v4.0.0 (Markdown) ロード完了" -ForegroundColor Gray

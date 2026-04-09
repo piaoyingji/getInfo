@@ -1,35 +1,33 @@
 # Main_Menu.ps1
-# Version: 4.0.0
-# Description: サーバー一括調査ツール (v4.0.0 Markdown レポート対応版)
+# Version: 4.1.0
+# Description: Server Investigation Suite (v4.1.0 ASCII-Clean for encoding safety)
 
 $ErrorActionPreference = "Stop"
 
 Try {
-    # 1. パス初期化
     $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition -ErrorAction SilentlyContinue
     If (-not $ScriptDir) { $ScriptDir = Get-Location }
     Set-Location $ScriptDir
 
-    # 2. 共通モジュールのロード
     $UtilsPath = Join-Path $ScriptDir "Module_Utils.ps1"
-    If (Test-Path $UtilsPath) { . $UtilsPath } Else { throw "Module_Utils.ps1 が見つかりません。" }
+    If (Test-Path $UtilsPath) { . $UtilsPath } Else { throw "Module_Utils.ps1 not found." }
 
     . (Join-Path $ScriptDir "Module_Apache.ps1")
     . (Join-Path $ScriptDir "Module_Tomcat.ps1")
     . (Join-Path $ScriptDir "Module_Oracle.ps1")
 
-    # --- [画面1: 表紙] ---
+    # [UI: Cover]
     Clear-Host
     Write-MenuHeader (T "CoverTitle")
-    Write-Host "Version: 4.0.0 (Enhanced Markdown Reporting)" -ForegroundColor Gray
+    Write-Host "Version: 4.1.0 (Encoding Optimized)" -ForegroundColor Gray
     Write-Host "`n$(T 'Msg_InputFile')" -NoNewline
     $InFilename = Read-Host
     $Global:ReportFile = If ([string]::IsNullOrWhiteSpace($InFilename)) { "Investigation_Report.md" } Else { if ($InFilename -notlike "*.md") { $InFilename + ".md" } else { $InFilename } }
 
     $StartTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    Set-Content -Path $Global:ReportFile -Value ("# 調査レポート`n`n- **開始時間**: $StartTime`n") -Encoding UTF8
+    Set-Content -Path $Global:ReportFile -Value ("# Investigation Report`n`n- **Start Time**: $StartTime`n") -Encoding UTF8
 
-    # --- [画面2: メインメニュー] ---
+    # [UI: Main Menu]
     $MainOptions = @(
         (T "Opt_All"),
         (T "Opt_Apache"),
@@ -73,22 +71,23 @@ Try {
                 While ($true) {
                     $SubSelected = Invoke-Menu -Title (T "SubTitle") -Options $SubOptions -Default $SubSelected
                     If ($SubSelected -eq 0) { 
-                        Write-Host "`n現在は日本語のみ対応しています。" -ForegroundColor Yellow
+                        Write-Host "`n$(T 'Msg_Lang_JA_Only')" -ForegroundColor Yellow
                         Start-Sleep -Seconds 1 
                     } Else { break }
                 }
                 $Selected = 4
             }
             5 { 
-                Write-Host "`n終了します..." -ForegroundColor Gray
+                Write-Host "`n$(T 'Msg_Menu_Exit')" -ForegroundColor Gray
                 return 
             }
         }
     }
 
 } Catch {
-    Write-Host "`n[Critical Error] $($_.Exception.Message)" -ForegroundColor Red
+    $ErrMsg = (T "Msg_Critical_Error") + " " + $_.Exception.Message
+    Write-Host "`n$ErrMsg" -ForegroundColor Red
     Write-Host "StackTrace: $($_.ScriptStackTrace)" -ForegroundColor DarkGray
-    Write-Host "`nプログラムが異常終了しました。Enterキーを押してください。" -ForegroundColor White
+    Write-Host "`n$(T 'Msg_Program_End')" -ForegroundColor White
     [void](Read-Host)
 }
