@@ -53,7 +53,7 @@ Try {
                 # Investigating one by one to allow separate method selection
                 Investigate-Apache
                 Investigate-Tomcat
-                Investigate-Oracle -Silent $true
+                Investigate-Oracle
                 Wait-AndClear 
             }
             1 { 
