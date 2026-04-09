@@ -64,7 +64,7 @@ Function Investigate-Apache {
         $MDDetail += "#### バージョン詳細`r`n"
         $MDDetail += "```text`r`n"
         $MDDetail += $Version.Trim() + "`r`n"
-        $MDDetail += "```"
+        $MDDetail += '```' + "`r`n"
         
         Log-Info -Title "Apache Instance [${Count}]" -ShortResult "$ShortV" -FullDetail $MDDetail
         $Count++

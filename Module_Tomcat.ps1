@@ -72,7 +72,7 @@ Function Investigate-Tomcat {
         $MDDetail += "`r`n#### バージョン詳細`r`n"
         $MDDetail += "```text`r`n"
         $MDDetail += $RawV.Trim() + "`r`n"
-        $MDDetail += "```"
+        $MDDetail += '```' + "`r`n"
 
         Log-Info -Title "Tomcat Instance [${Count}]" -ShortResult "$ShortV | Apps: $($Apps.Count)" -FullDetail $MDDetail
         $Count++
