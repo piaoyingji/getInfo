@@ -1,13 +1,28 @@
 # Module_Tomcat.ps1
-# Version: 4.1.0
-# Description: Tomcat Investigation Module (v4.0.1 Speed Optimized)
+# Version: 4.3.0
+# Description: Tomcat Investigation Module (v4.3.0 Parameterized search)
 
 Function Investigate-Tomcat {
-    Param([Boolean]$Silent = $false)
+    Param(
+        [Boolean]$Silent = $false,
+        [Int]$Method = -1, # -1: Ask user, 0: Proc/Svc, 1: Path Scan
+        [String]$TargetPath = ""
+    )
     
     $CurrentDrive = (Get-Location).Drive.Name + ":"
     $MenuTitle = "Tomcat Search [$CurrentDrive]"
-    If (-not $Silent) { Write-MenuHeader $MenuTitle }
+
+    # Resolve Method
+    $ResolvedMethod = $Method
+    if ($ResolvedMethod -eq -1) {
+        if (-not $Silent) {
+            Write-MenuHeader $MenuTitle
+            $Opts = @((T "Opt_Method_Proc"), (T "Opt_Method_Path"))
+            $ResolvedMethod = Invoke-Menu -Title (T "Main_Tomcat") -Options $Opts
+        } else {
+            $ResolvedMethod = 0 # Default
+        }
+    }
     
     $TomcatRoots = New-Object System.Collections.Generic.HashSet[string]
     
@@ -25,39 +40,38 @@ Function Investigate-Tomcat {
         return $null
     }
 
-    # [1/4] Environment, Registry and Services
-    Write-Host "[1/4] $(T 'SvcSearch')..." -ForegroundColor Gray
-    Try {
-        # 1. Environment Variable
-        $EnvHome = [System.Environment]::GetEnvironmentVariable("CATALINA_HOME", "Machine")
-        If ($EnvHome) { $Root = Get-TomcatRoot $EnvHome; If ($Root -and $Root.StartsWith($CurrentDrive)) { [void]$TomcatRoots.Add($Root.ToLower()) } }
+    if ($ResolvedMethod -eq 0) {
+        # [Strategy 1] Environment, Registry and Services
+        Write-Host "[Tomcat] $(T 'SvcSearch')..." -ForegroundColor Gray
+        Try {
+            # 1. Environment Variable
+            $EnvHome = [System.Environment]::GetEnvironmentVariable("CATALINA_HOME", "Machine")
+            If ($EnvHome) { $Root = Get-TomcatRoot $EnvHome; If ($Root -and $Root.StartsWith($CurrentDrive)) { [void]$TomcatRoots.Add($Root.ToLower()) } }
 
-        # 2. Registry
-        $RegPaths = @(
-            "HKLM:\SYSTEM\CurrentControlSet\Services",
-            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
-            "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
-        )
-        foreach ($RegRoot in $RegPaths) {
-            Get-ChildItem $RegRoot -ErrorAction SilentlyContinue | Foreach-Object {
-                $Path = ""
-                If ($_.PSParentPath -match "Services") {
-                    If ($_.Name -like "*tomcat*" -or $_.GetValue("DisplayName") -like "*tomcat*") {
-                        $ImgPath = $_.GetValue("ImagePath")
-                        If ($ImgPath) { $Path = $ImgPath -replace ' -.*$', '' }
+            # 2. Registry
+            $RegPaths = @(
+                "HKLM:\SYSTEM\CurrentControlSet\Services",
+                "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+                "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
+            )
+            foreach ($RegRoot in $RegPaths) {
+                Get-ChildItem $RegRoot -ErrorAction SilentlyContinue | Foreach-Object {
+                    $Path = ""
+                    If ($_.PSParentPath -match "Services") {
+                        If ($_.Name -like "*tomcat*" -or $_.GetValue("DisplayName") -like "*tomcat*") {
+                            $ImgPath = $_.GetValue("ImagePath")
+                            If ($ImgPath) { $Path = $ImgPath -replace ' -.*$', '' }
+                        }
+                    } Else {
+                        $DispName = $_.GetValue("DisplayName")
+                        If ($DispName -match "Tomcat") { $Path = $_.GetValue("InstallLocation") }
                     }
-                } Else {
-                    $DispName = $_.GetValue("DisplayName")
-                    If ($DispName -match "Tomcat") { $Path = $_.GetValue("InstallLocation") }
+                    If ($Path) { $Root = Get-TomcatRoot $Path; If ($Root -and $Root.StartsWith($CurrentDrive)) { [void]$TomcatRoots.Add($Root.ToLower()) } }
                 }
-                If ($Path) { $Root = Get-TomcatRoot $Path; If ($Root -and $Root.StartsWith($CurrentDrive)) { [void]$TomcatRoots.Add($Root.ToLower()) } }
             }
-        }
-    } Catch {}
+        } Catch {}
 
-    # [2/4] Processes
-    If ($TomcatRoots.Count -eq 0) {
-        Write-Host "[2/4] $(T 'ProcSearch')..." -ForegroundColor Gray
+        Write-Host "[Tomcat] $(T 'ProcSearch')..." -ForegroundColor Gray
         $ProcFilter = "Name LIKE '%tomcat%' OR Name = 'java.exe'"
         Get-CimInstance Win32_Process -Filter $ProcFilter -ErrorAction SilentlyContinue | Foreach-Object {
             If ($_.Name -eq "java.exe" -and $_.CommandLine -notmatch "catalina") { return }
@@ -65,11 +79,31 @@ Function Investigate-Tomcat {
             If ($_.CommandLine -match '-Dcatalina\.home="?([^"^\-]+)"?') { $Paths += $Matches[1].TrimEnd('\').Trim('"') }
             Foreach ($P in $Paths) { $Root = Get-TomcatRoot $P; If ($Root -and $Root.StartsWith($CurrentDrive)) { [void]$TomcatRoots.Add($Root.ToLower()) } }
         }
+    } else {
+        # [Strategy 2] Target Folder Scan
+        $ActualPath = $TargetPath
+        if ([string]::IsNullOrWhiteSpace($ActualPath)) {
+            $ActualPath = Read-Host "`n[Tomcat] $(T 'Msg_Input_Path')"
+        }
+
+        if ([string]::IsNullOrWhiteSpace($ActualPath) -or -not (Test-Path $ActualPath)) {
+            Write-Host (T "Msg_Invalid_Path") -ForegroundColor Red
+            return
+        }
+
+        Write-Host "[Tomcat] $(T 'PathSearch') @ $ActualPath..." -ForegroundColor Yellow
+        $Hits = cmd.exe /c "dir `"$ActualPath\bootstrap.jar`" /s /b 2>nul"
+        if ($Hits) {
+            foreach ($H in $Hits) { 
+                $Root = Get-TomcatRoot $H
+                if ($Root) { [void]$TomcatRoots.Add($Root.ToLower()) }
+            }
+        }
     }
     
     # Markdown Output
     If ($TomcatRoots.Count -eq 0) {
-        Log-Info -Title "Apache Tomcat" -ShortResult (T "Msg_None") -FullDetail "No Instance found on ${CurrentDrive}."
+        Log-Info -Title "Apache Tomcat" -ShortResult (T "Msg_None") -FullDetail "No Instance found."
         return
     }
     

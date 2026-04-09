@@ -45,8 +45,16 @@ Try {
         Switch ($Selected) {
             0 { 
                 Write-MenuHeader (T "InvestTotalTitle")
-                Investigate-Apache -Silent $true
-                Investigate-Tomcat -Silent $true
+                # Global Method Select for ALL
+                $GlobalOpts = @((T "Opt_Method_Proc"), (T "Opt_Method_Path"))
+                $GlobalMethod = Invoke-Menu -Title (T "InvestTotalTitle") -Options $GlobalOpts
+                $GlobalPath = ""
+                if ($GlobalMethod -eq 1) {
+                    $GlobalPath = Read-Host "`n$(T 'Msg_Input_Path')"
+                }
+
+                Investigate-Apache -Silent $true -Method $GlobalMethod -TargetPath $GlobalPath
+                Investigate-Tomcat -Silent $true -Method $GlobalMethod -TargetPath $GlobalPath
                 Investigate-Oracle -Silent $true
                 Wait-AndClear 
             }

@@ -1,75 +1,89 @@
 # Module_Apache.ps1
-# Version: 4.1.0
-# Description: Apache Investigation Module (v4.0.1 Speed Optimized)
+# Version: 4.3.0
+# Description: Apache Investigation Module (v4.3.0 Parameterized search)
 
 Function Investigate-Apache {
-    Param([Boolean]$Silent = $false)
+    Param(
+        [Boolean]$Silent = $false,
+        [Int]$Method = -1, # -1: Ask user, 0: Proc/Svc, 1: Path Scan
+        [String]$TargetPath = ""
+    )
     
     $CurrentDrive = (Get-Location).Drive.Name + ":"
     $MenuTitle = "Apache Search [$CurrentDrive]"
-    If (-not $Silent) { Write-MenuHeader $MenuTitle }
     
-    $ApacheExes = New-Object System.Collections.Generic.HashSet[string]
-    
-    # [1/3] Registry and Services
-    Write-Host "[1/3] $(T 'SvcSearch')..." -ForegroundColor Gray
-    $RegPaths = @(
-        "HKLM:\SYSTEM\CurrentControlSet\Services",
-        "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
-        "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
-    )
-    Try {
-        foreach ($RegRoot in $RegPaths) {
-            Get-ChildItem $RegRoot -ErrorAction SilentlyContinue | Foreach-Object {
-                $Path = ""
-                If ($_.PSParentPath -match "Services") {
-                    $ImgPath = $_.GetValue("ImagePath")
-                    If ($ImgPath -match "httpd\.exe") {
-                        if ($ImgPath -match '"?([^"]+\.exe)"?') { $Path = $Matches[1] }
-                    }
-                } Else {
-                    $DispName = $_.GetValue("DisplayName")
-                    $InstallLoc = $_.GetValue("InstallLocation")
-                    If ($DispName -match "Apache" -and $InstallLoc -and (Test-Path (Join-Path $InstallLoc "bin\httpd.exe"))) {
-                        $Path = Join-Path $InstallLoc "bin\httpd.exe"
-                    }
-                }
-                If ($Path -and $Path.StartsWith($CurrentDrive, [System.StringComparison]::OrdinalIgnoreCase) -and (Test-Path $Path)) {
-                    [void]$ApacheExes.Add($Path.ToLower())
-                }
-            }
-        }
-    } Catch {}
-
-    # [2/3] Processes and 'where' command
-    If ($ApacheExes.Count -eq 0) {
-        Write-Host "[2/3] $(T 'ProcSearch')..." -ForegroundColor Gray
-        Get-CimInstance Win32_Process -Filter "Name = 'httpd.exe'" -ErrorAction SilentlyContinue | Foreach-Object {
-            $Path = $_.ExecutablePath
-            If ($Path -and $Path.StartsWith($CurrentDrive) -and (Test-Path $Path)) { [void]$ApacheExes.Add($Path.ToLower()) }
-        }
-        where.exe httpd.exe 2>$null | Foreach-Object {
-            If ($_ -and $_.StartsWith($CurrentDrive) -and (Test-Path $_)) { [void]$ApacheExes.Add($_.ToLower()) }
+    # Resolve Method
+    $ResolvedMethod = $Method
+    if ($ResolvedMethod -eq -1) {
+        if (-not $Silent) {
+            Write-MenuHeader $MenuTitle
+            $Opts = @((T "Opt_Method_Proc"), (T "Opt_Method_Path"))
+            $ResolvedMethod = Invoke-Menu -Title (T "Main_Apache") -Options $Opts
+        } else {
+            $ResolvedMethod = 0 # Default to Proc in silent mode if not specified
         }
     }
-    
-    # [3/3] Disk Scan (Last Resort)
-    If ($ApacheExes.Count -eq 0) {
-        Write-Host "[3/3] $(T 'PathSearch')..." -ForegroundColor Yellow
-        $Excludes = "Windows|ProgramData|Users|Recycle|System Volume|AppData|Common Files|Microsoft|Package Cache"
-        $TargetFolders = Get-ChildItem ($CurrentDrive + "\") -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -notmatch $Excludes }
-        Foreach ($Dir in $TargetFolders) {
-            $SearchPath = Join-Path $Dir.FullName "httpd.exe"
-            if (Test-Path $SearchPath) { [void]$ApacheExes.Add($SearchPath.ToLower()); continue }
-            
-            $Hits = cmd.exe /c "dir `"$($Dir.FullName)\httpd.exe`" /s /b 2>nul"
-            If ($Hits) { Foreach ($H in $Hits) { If ($H -and (Test-Path $H)) { [void]$ApacheExes.Add($H.ToLower()) } } }
+
+    $ApacheExes = New-Object System.Collections.Generic.HashSet[string]
+
+    if ($ResolvedMethod -eq 0) {
+        # [Strategy 1] Services, Registry and Processes
+        Write-Host "[Apache] $(T 'SvcSearch')..." -ForegroundColor Gray
+        $RegPaths = @(
+            "HKLM:\SYSTEM\CurrentControlSet\Services",
+            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+            "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
+        )
+        Try {
+            foreach ($RegRoot in $RegPaths) {
+                Get-ChildItem $RegRoot -ErrorAction SilentlyContinue | Foreach-Object {
+                    $Path = ""
+                    if ($_.PSParentPath -match "Services") {
+                        $ImgPath = $_.GetValue("ImagePath")
+                        if ($ImgPath -match "httpd\.exe") {
+                            if ($ImgPath -match '"?([^"]+\.exe)"?') { $Path = $Matches[1] }
+                        }
+                    } else {
+                        $DispName = $_.GetValue("DisplayName")
+                        $InstallLoc = $_.GetValue("InstallLocation")
+                        if ($DispName -match "Apache" -and $InstallLoc -and (Test-Path (Join-Path $InstallLoc "bin\httpd.exe"))) {
+                            $Path = Join-Path $InstallLoc "bin\httpd.exe"
+                        }
+                    }
+                    if ($Path -and $Path.StartsWith($CurrentDrive, [System.StringComparison]::OrdinalIgnoreCase) -and (Test-Path $Path)) {
+                        [void]$ApacheExes.Add($Path.ToLower())
+                    }
+                }
+            }
+        } Catch {}
+
+        Write-Host "[Apache] $(T 'ProcSearch')..." -ForegroundColor Gray
+        Get-CimInstance Win32_Process -Filter "Name = 'httpd.exe'" -ErrorAction SilentlyContinue | Foreach-Object {
+            $Path = $_.ExecutablePath
+            if ($Path -and $Path.StartsWith($CurrentDrive) -and (Test-Path $Path)) { [void]$ApacheExes.Add($Path.ToLower()) }
+        }
+    } else {
+        # [Strategy 2] Target Folder Scan
+        $ActualPath = $TargetPath
+        if ([string]::IsNullOrWhiteSpace($ActualPath)) {
+            $ActualPath = Read-Host "`n[Apache] $(T 'Msg_Input_Path')"
+        }
+        
+        if ([string]::IsNullOrWhiteSpace($ActualPath) -or -not (Test-Path $ActualPath)) {
+            Write-Host (T "Msg_Invalid_Path") -ForegroundColor Red
+            return
+        }
+
+        Write-Host "[Apache] $(T 'PathSearch') @ $ActualPath..." -ForegroundColor Yellow
+        $Hits = cmd.exe /c "dir `"$ActualPath\httpd.exe`" /s /b 2>nul"
+        if ($Hits) {
+            foreach ($H in $Hits) { if ($H -and (Test-Path $H)) { [void]$ApacheExes.Add($H.ToLower()) } }
         }
     }
     
     # Markdown Output
-    If ($ApacheExes.Count -eq 0) {
-        Log-Info -Title "Apache HTTP Server" -ShortResult (T "Msg_None") -FullDetail "No Apache found on ${CurrentDrive}."
+    if ($ApacheExes.Count -eq 0) {
+        Log-Info -Title "Apache HTTP Server" -ShortResult (T "Msg_None") -FullDetail "No Apache found."
         return
     }
     
@@ -79,7 +93,7 @@ Function Investigate-Apache {
         $Root = Split-Path (Split-Path $Exe)
         $Version = & "$Exe" -v 2>$null | Out-String
         $ShortV = "Unknown"
-        If ($Version -match "Server version:\s+(.*)") { $ShortV = $Matches[1].Trim() }
+        if ($Version -match "Server version:\s+(.*)") { $ShortV = $Matches[1].Trim() }
         
         $MDDetail = "- **Install Path**: `$Root` `r`n"
         $MDDetail += "#### Version Detail`r`n"
