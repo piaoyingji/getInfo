@@ -1,6 +1,6 @@
 # Main_Menu.ps1
-# Version: 3.5.0
-# Description: サーバー一括調査ツール (v3.5.0 Oracle 改行不具合・バージョン対応版)
+# Version: 4.0.0
+# Description: サーバー一括調査ツール (v4.0.0 Markdown レポート対応版)
 
 $ErrorActionPreference = "Stop"
 
@@ -21,13 +21,13 @@ Try {
     # --- [画面1: 表紙] ---
     Clear-Host
     Write-MenuHeader (T "CoverTitle")
-    Write-Host "Version: 3.5.0 (Aligned Table + Oracle Version)" -ForegroundColor Gray
+    Write-Host "Version: 4.0.0 (Enhanced Markdown Reporting)" -ForegroundColor Gray
     Write-Host "`n$(T 'Msg_InputFile')" -NoNewline
     $InFilename = Read-Host
-    $Global:ReportFile = If ([string]::IsNullOrWhiteSpace($InFilename)) { "Investigation_Report.txt" } Else { if ($InFilename -notlike "*.txt") { $InFilename + ".txt" } else { $InFilename } }
+    $Global:ReportFile = If ([string]::IsNullOrWhiteSpace($InFilename)) { "Investigation_Report.md" } Else { if ($InFilename -notlike "*.md") { $InFilename + ".md" } else { $InFilename } }
 
     $StartTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    Set-Content -Path $Global:ReportFile -Value ("$(T 'Msg_Start'): $StartTime`n") -Encoding UTF8
+    Set-Content -Path $Global:ReportFile -Value ("# 調査レポート`n`n- **開始時間**: $StartTime`n") -Encoding UTF8
 
     # --- [画面2: メインメニュー] ---
     $MainOptions = @(

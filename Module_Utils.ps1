@@ -1,8 +1,8 @@
 # Module_Utils.ps1
-# Version: 3.5.0
-# Description: 共通ユーティリティ (v3.5.0 Oracle バージョン追加・改行不具合修正版)
+# Version: 4.0.0
+# Description: 共通ユーティリティ (v4.0.0 Markdown レポート対応版)
 
-$Global:ReportFile = "Investigation_Report.txt"
+$Global:ReportFile = "Investigation_Report.md"
 $Global:I18n = @{
     "ja-JP" = @{
         "MenuHeader"       = "サーバー一括調査ツール"
@@ -23,7 +23,7 @@ $Global:I18n = @{
         "SvcSearch"        = "レジストリ・サービス情報の検索中..."
         "PathSearch"       = "ディスク探索 (最終手段) 開始..."
         "Msg_Wait"         = "Enterキーを押してメニューに戻る..."
-        "Msg_InputFile"    = "【入力】レポート名 (デフォルト: Investigation_Report.txt): "
+        "Msg_InputFile"    = "【入力】レポート名 (デフォルト: Investigation_Report.md): "
         "Msg_Start"        = "調査開始時間"
         "Msg_Result"       = "[発見] {1} が {0} 件見つかりました。"
         "Msg_None"         = "該当なし"
@@ -86,9 +86,17 @@ Function Write-MenuHeader {
 Function Log-Info {
     Param([String]$Title, [String]$ShortResult, [String]$FullDetail)
     Write-Host ("[RESULT] " + $Title + ": " + $ShortResult) -ForegroundColor Green
-    $Content = ("="*50 + "`n--- " + $Title + " ---`n" + $FullDetail + "`n")
-    If (-not [string]::IsNullOrWhiteSpace($FullDetail)) {
-        # 配列が渡された場合でも確実に改行が残るようにエンコードと入力をチェック
+    
+    # Markdown 形式での構築
+    $Content = "`n## $Title`n"
+    $Content += "- **結果概略**: $ShortResult`n"
+    If ($FullDetail) {
+        $Content += "### 詳細情報`n"
+        $Content += "$FullDetail`n"
+    }
+    $Content += "---`n"
+    
+    If (-not [string]::IsNullOrWhiteSpace($FullDetail) -or -not [string]::IsNullOrWhiteSpace($ShortResult)) {
         Add-Content -Path $Global:ReportFile -Value $Content -Encoding UTF8
     }
 }
@@ -98,4 +106,4 @@ Function Wait-AndClear {
     [void](Read-Host)
 }
 
-Write-Host "[INIT] Module_Utils v3.5.0 ロード完了" -ForegroundColor Gray
+Write-Host "[INIT] Module_Utils v4.0.0 (Markdown) ロード完了" -ForegroundColor Gray

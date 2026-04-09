@@ -1,6 +1,6 @@
 # Module_Oracle.ps1
-# Version: 3.5.0
-# Description: Oracle 調査モジュール (バージョン取得・改行不具合修正 v3.5.0)
+# Version: 4.0.0
+# Description: Oracle 調査モジュール (v4.0.0 Markdown テーブル出力対応版)
 
 Function Investigate-Oracle {
     Param([Boolean]$Silent = $false)
@@ -28,29 +28,28 @@ Function Investigate-Oracle {
     
     Write-Host "`n$(T 'Ora_Connect')" -ForegroundColor Gray
 
-    # ご指定のテーブル: {ユーザー名}.CONF_SYSCONTROL
-    # 加えて、Oracleのバージョン情報も取得します
+    # Markdown テーブルとバージョン取得のための SQL
     $TargetTable = "${User}.CONF_SYSCONTROL"
     
     $MainSql = @"
-SET PAGESIZE 100
+SET PAGESIZE 1000
 SET FEEDBACK OFF
 SET HEADING ON
-SET LINESIZE 500
+SET LINESIZE 1000
 SET TERMOUT ON
 SET ECHO OFF
 SET VERIFY OFF
 SET TRIMSPOOL ON
 SET COLSEP ' | '
-SET UNDERLINE '-'
+SET UNDERLINE OFF
 
-PROMPT [ ORACLE VERSION ]
+PROMPT [VERSION_START]
 SELECT BANNER FROM V`$VERSION;
+PROMPT [VERSION_END]
 
-PROMPT
-PROMPT [ PROPERTY CONFIGURATION ]
-COLUMN PROPERTY_NAME FORMAT A25
-COLUMN VALUE         FORMAT A25
+PROMPT [DATA_START]
+COLUMN PROPERTY_NAME FORMAT A30
+COLUMN VALUE         FORMAT A30
 COLUMN DESCRIPTION   FORMAT A60
 
 SELECT 
@@ -59,26 +58,50 @@ SELECT
     CS_CPROPERTYDESC  AS DESCRIPTION
 FROM $TargetTable 
 WHERE CS_CPROPERTYNAME LIKE '%Version%';
+PROMPT [DATA_END]
 EXIT;
 "@
-    # ASCII保存で安定性を確保
     $MainSql | Set-Content -Path $TmpSql -Encoding ASCII
 
     Try {
-        # 実行SQLをログに記録
-        $LogContent = "Executed SQL:`n$MainSql`n`nResults:`n"
-
-        # sqlplus の出力を直接キャプチャし、配列を改行コードで明示的に結合
         $RawOutput = sqlplus -S "${User}/${UnsecurePass}@${Instance}" "@$TmpSql"
-        $Output = $RawOutput -join "`r`n"
-        
-        If ($Output -like "*ORA-*") {
-            Log-Info -Title "Oracle Database" -ShortResult "エラー" -FullDetail ($LogContent + $Output)
-        } Else {
-            $CleanOutput = $Output.Trim()
-            If ([string]::IsNullOrWhiteSpace($CleanOutput)) { $CleanOutput = "該当データなし" }
-            Log-Info -Title "Oracle Database" -ShortResult "成功" -FullDetail ($LogContent + $CleanOutput)
+        $OutputStr = $RawOutput -join "`r`n"
+
+        # バージョン情報の抽出
+        $OraVer = "取得失敗"
+        If ($OutputStr -match "\[VERSION_START\]`r`n(.*?)`r`n\[VERSION_END\]") {
+            $OraVer = $Matches[1].Trim()
         }
+
+        # データの抽出と Markdown テーブル変換
+        $MDTable = ""
+        If ($OutputStr -match "\[DATA_START\]`r`n(.*?)`r`n\[DATA_END\]") {
+            $DataBlock = $Matches[1].Trim()
+            $Lines = $DataBlock -split "`r`n" | Where-Object { $_.Trim() -ne "" }
+            
+            If ($Lines.Count -ge 1) {
+                # 1行目はヘッダー
+                $Header = "| " + ($Lines[0].Trim() -replace '\s+\|\s+', ' | ') + " |"
+                $MDTable += $Header + "`r`n"
+                # セパレーターを挿入 (3列固定)
+                $MDTable += "| :--- | :--- | :--- |`r`n"
+                # 2行目以降がデータ
+                For ($i = 1; $i -lt $Lines.Count; $i++) {
+                    $MDTable += "| " + ($Lines[$i].Trim() -replace '\s+\|\s+', ' | ') + " |`r`n"
+                }
+            }
+        }
+
+        If ([string]::IsNullOrWhiteSpace($MDTable)) { $MDTable = "該当データなし" }
+
+        # Markdown 用の整形
+        $FinalMD = "#### Oracle DB バージョン`n"
+        $FinalMD += "> $OraVer`n`n"
+        $FinalMD += "#### システム設定表 ($TargetTable)`n"
+        $FinalMD += $MDTable
+
+        Log-Info -Title "Oracle Database" -ShortResult "取得完了" -FullDetail $FinalMD
+
     } Catch {
         Log-Info -Title "Oracle Database" -ShortResult "例外発生" -FullDetail "Msg: $($_.Exception.Message)"
     } Finally {
